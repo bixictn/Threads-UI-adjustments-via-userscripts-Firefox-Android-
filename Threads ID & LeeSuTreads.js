@@ -37,7 +37,12 @@
 
         const p = document.createElement('div');
         p.className = "my-cake-plugin";
-        p.textContent = "🍰 " + pluginBadge.title.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
+        if(/未分享|無地點/.test(pluginBadge.title)){
+            p.textContent = pluginBadge.title.match(/^(.*?)[\s•]/);
+        }
+        else{
+            p.textContent = "🍰 " + pluginBadge.title.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
+        }
         p.style.cssText = 'margin-bottom: 2px; font-size: 13px; line-height: 1.3em;';
 
         idEl.before(p);
