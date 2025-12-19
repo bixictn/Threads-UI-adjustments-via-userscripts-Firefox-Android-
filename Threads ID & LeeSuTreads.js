@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name  Threads ID & Lee Su Threads
 // @namespace    http://tampermonkey.net/
-// @version      0.1.2
+// @version      0.1.3
 // @description  Show Date
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -23,12 +23,13 @@
         if (!postContainer) return;
 
         const allLinks = Array.from(postContainer.querySelectorAll('a[href*="/@"]'));
+        const pluginBadge = postContainer.querySelector('.threads-profile-info-badge[title]')
+
         const idEl = allLinks.find(link => {
             return link.innerText.trim().length > 0 && !link.querySelector('img') && !link.closest('[dir="auto"]');
         });
-
-        const pluginBadge = postContainer.querySelector('.threads-profile-info-badge[title]');
-        if (!idEl || !pluginBadge) return;
+       if (!idEl || !pluginBadge) return;
+        const pluginBtn = postContainer.querySelector('.threads-fetch-btn');
 
         if (idEl.previousElementSibling && idEl.previousElementSibling.textContent.includes("🍰")) {
             timeEl.dataset.processedPlugin = "done";
@@ -41,21 +42,25 @@
             p.textContent = "🫥" + pluginBadge.title.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();;
         }
         else if(/•/.test(pluginBadge.title)){
-            p.textContent = "🍰 " + pluginBadge.title.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
+            p.textContent = "🍰 " + pluginBadge.title.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim() + pluginBadge.innerText;
         }else{
             p.textContent = pluginBadge.title;
         }
         p.style.cssText = 'margin-bottom: 2px; font-size: 13px; line-height: 1.3em;';
 
         idEl.before(p);
-
         timeEl.dataset.processedPlugin = "done";
+        pluginBadge.dataset.processed = "done";
+        pluginBadge.style.visibility = 'hidden';
+        pluginBadge.style.height = '0';
+        pluginBadge.style.position = 'absolute';
+
     }
 
     function mainLoop() {
         document.querySelectorAll('time').forEach(t => addPluginData(t));
     }
-
+    
     mainLoop();
     const observer = new MutationObserver(mainLoop);
     observer.observe(document.body, { childList: true, subtree: true });
