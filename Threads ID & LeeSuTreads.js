@@ -61,7 +61,7 @@
                     let datePart = titleText.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
                     let icon = titleText.includes('未分享') ? "🫥 " : "🍰 ";
                     if ( titleText.includes('•')){
-                        p.textContent = icon + datePart + (badge.innerText || "");
+                        p.textContent = icon + datePart + (titleText.includes('未分享')?'':badge.innerText);
                     }
                     else{
                         p.textContent = titleText;
