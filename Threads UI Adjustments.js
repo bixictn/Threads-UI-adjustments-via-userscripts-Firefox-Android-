@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.6
+// @version      0.7.7
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -30,7 +30,7 @@
     `;
     document.head.appendChild(style);
 
-    // 2.  ID 
+    // 2.  ID
     function applyIdReformat(timeEl) {
         if (timeEl.dataset.processed === "done") return;
 
@@ -70,23 +70,16 @@
                 const s = document.createElement('a');
                 s.href = subjectLink.href;
                 s.textContent = `<${subjectLink.innerText.trim()}>`;
-                s.style.cssText = 'color: #0095f6; font-weight: bold; text-decoration: none;';
+                s.style.cssText = 'color: #0095f6; font-size:16px;font-weight: bold; text-decoration: none;';
                 s.onmouseover = () => { s.style.textDecoration = 'underline'; };
                 s.onmouseout = () => { s.style.textDecoration = 'none'; };
-
                 infoLine.appendChild(s);
                 subjectLink.style.display = 'none';
                 hasSubject = true;
             }
-
-            idElement.before(infoLine);
-
-            if (!hasSubject) {
-                if (!idElement.nextElementSibling || idElement.nextElementSibling.tagName !== 'BR') {
-                    const br = document.createElement('br');
-                    idElement.after(br);
-                }
-            }
+            const br = document.createElement('br');
+            idElement.after(br);
+            idElement.after(infoLine);
 
             timeEl.dataset.processed = "done";
             timeEl.style.visibility = 'hidden';
