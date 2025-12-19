@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee Su Threads
 // @namespace    http://tampermonkey.net/
-// @version      0.1.4
+// @version      0.1.5
 // @description  Show Date
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -12,39 +12,43 @@
     'use strict';
 
     function doSmartMove() {
-        // 抓取所有插件元素
         const badges = document.querySelectorAll('[class*="threads-"][title]');
 
         badges.forEach(badge => {
             const titleText = badge.title || "";
+            const content = badge.innerText || "";
 
-            // --- 判斷 1：如果沒日期（Get location 或 取得中），就只顯示按鈕 ---
-            if (!titleText.includes("加入時間")) {
-                badge.style.display = "";
-                badge.style.visibility = "visible";
+            // --- 狀況 A：正在載入中 (出現⏳) ---
+            if (content.includes("⏳")) {
+                badge.style.opacity = "0"; // 讓漏斗透明，但繼續跑
+                badge.style.pointerEvents = "none";
                 return;
             }
 
-            // --- 判斷 2：已經有日期了，準備搬移 ---
+            // --- 狀況 B：沒日期 (Get location) -> 顯示按鈕 ---
+            if (!titleText.includes("加入時間")) {
+                badge.style.display = "";
+                badge.style.visibility = "visible";
+                badge.style.opacity = "1";
+                badge.style.pointerEvents = "auto";
+                return;
+            }
+
+            // --- 狀況 C：已有日期 (不論是剛按完還是原本就有) -> 執行搬移 ---
             const scope = badge.closest('article') || badge.closest('[data-pressable-container="true"]');
             if (!scope) return;
 
-            // 嘗試從多個管道抓 Username，確保「原本就有資料」的也能抓到
-            const fetchBtn = scope.querySelector('[class*="fetch-btn"]');
-            let username = fetchBtn ? fetchBtn.getAttribute('data-username') : null;
-
-            // 如果從按鈕抓不到，從連結抓
+            // 抓取 Username (優先從屬性，次之從連結)
+            let username = badge.getAttribute('data-username');
             if (!username) {
                 const userLink = scope.querySelector('a[href*="/@"]');
                 if (userLink) {
-                    const href = userLink.getAttribute('href');
-                    username = href.split('/@')[1].split(/[?\/]/)[0];
+                    username = userLink.getAttribute('href').split('/@')[1].split(/[?\/]/)[0];
                 }
             }
-
             if (!username) return;
 
-            // 尋找 ID 連結位置
+            // 尋找上方 ID 連結位置
             const idLinks = Array.from(scope.querySelectorAll('a[href*="/@"]'));
             const target = idLinks.find(link =>
                 link.innerText.trim().length > 0 &&
@@ -53,33 +57,34 @@
             );
 
             if (target) {
-                // 如果 ID 前面還沒插過 Cake，就插進去
+                // 執行搬移標註
                 if (!target.previousElementSibling || !target.previousElementSibling.classList.contains("my-cake-plugin")) {
                     const p = document.createElement('div');
                     p.className = "my-cake-plugin";
 
                     let datePart = titleText.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
                     let icon = titleText.includes('未分享') ? "🫥 " : "🍰 ";
-                    if ( titleText.includes('•')){
-                        p.textContent = icon + datePart + (titleText.includes('未分享')?'':badge.innerText);
-                    }
-                    else{
+                    
+                    if (titleText.includes('•')) {
+                        p.textContent = icon + datePart + content.replace("⏳", "").trim();
+                    } else {
                         p.textContent = titleText;
                     }
 
                     p.style.cssText = 'color: #808080; font-size: 13px; font-weight: 400; margin-bottom: 3px; display: block;';
-
                     target.before(p);
                 }
 
-                // 只要搬成功了，就把原處的按鈕隱藏
+                // 搬成功後，徹底隱藏下方的原始元素
                 badge.style.display = "none";
                 badge.style.visibility = "hidden";
+                badge.style.height = '0';
+                badge.style.position = 'absolute';
             }
         });
     }
 
-    // 提高巡檢頻率，確保剛進頁面時原本就有資料的也能立刻被處理
+    // 提高巡檢頻率
     setInterval(doSmartMove, 500);
 
     // 監聽 DOM 變動與捲動
