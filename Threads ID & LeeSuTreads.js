@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee Su Threads
 // @namespace    http://tampermonkey.net/
-// @version      0.1.5
+// @version      0.1.6
 // @description  Show Date
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -10,6 +10,7 @@
 
 (function() {
     'use strict';
+    const globalUserCache = new Map();
 
     function doSmartMove() {
         const badges = document.querySelectorAll('[class*="threads-"][title]');
@@ -47,6 +48,7 @@
                 }
             }
             if (!username) return;
+            if(globalUserCache.has(username)) hideAllButtonsByUsername(username);
 
             // 尋找上方 ID 連結位置
             const idLinks = Array.from(scope.querySelectorAll('a[href*="/@"]'));
@@ -64,7 +66,7 @@
 
                     let datePart = titleText.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
                     let icon = titleText.includes('未分享') ? "🫥 " : "🍰 ";
-                    
+
                     if (titleText.includes('•')) {
                         p.textContent = icon + datePart + content.replace("⏳", "").trim();
                     } else {
@@ -74,13 +76,22 @@
                     p.style.cssText = 'color: #808080; font-size: 13px; font-weight: 400; margin-bottom: 3px; display: block;';
                     target.before(p);
                 }
-
-                // 搬成功後，徹底隱藏下方的原始元素
+                hideAllButtonsByUsername(username);
+                globalUserCache.set(username);
                 badge.style.display = "none";
                 badge.style.visibility = "hidden";
                 badge.style.height = '0';
                 badge.style.position = 'absolute';
             }
+        });
+    }
+
+    function hideAllButtonsByUsername(username) {
+        const allPossibleButtons = document.querySelectorAll(`button[data-username="${username}"]`);
+        allPossibleButtons.forEach(btn => {
+            btn.style.display = "none";
+            btn.style.visibility = "hidden";
+            btn.style.height = '0';
         });
     }
 
