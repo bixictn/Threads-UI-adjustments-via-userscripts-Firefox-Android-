@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7
+// @version      0.7.7.1
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -27,6 +27,8 @@
             margin-top: 10px !important;
             align-items: center !important;
         }
+
+
     `;
     document.head.appendChild(style);
 
@@ -48,13 +50,12 @@
             return;
         }
 
-        const idElement = postContainer.querySelector('a[href*="/@"]');
+        const idElement = postContainer.querySelector('a[href*="/@"]:not(:has(img))');
         const subjectLink = postContainer.querySelector('a[href*="/search?q="]');
 
         if (idElement) {
             const infoLine = document.createElement('div');
-            infoLine.style.cssText = 'display: flex; gap: 6px; align-items: center; margin-bottom: 2px; font-size: 13px; width: 100%;';
-
+            infoLine.style.cssText = 'top: 0 !important;left: 0 !important; font-size: 13px !important;color: #777 !important;   font-weight: normal !important;overflow: hidden !important;max-width: 250px !important;display: block !important;white-space: normal !important;    line-height: 1.5 !important;    pointer-events: auto !important; padding: 2px 4px !important;';
             const t = document.createElement('span');
             const rawTime = timeEl.textContent.trim();
 
@@ -102,18 +103,17 @@
                     wrapper.style.display = 'flex';
                     wrapper.style.alignItems = 'center';
                     wrapper.style.justifyContent = 'flex-start';
-                    wrapper.style.minHeight = '32px';
+                    wrapper.style.minHeight = '14px';
 
                     const btn = wrapper.querySelector('[role="button"]');
                     if (!btn) return;
                     btn.style.display = 'flex';
                     btn.style.alignItems = 'center';
-                    btn.style.gap = '5px';
 
                     const svg = btn.querySelector('svg');
                     const countSpan = btn.querySelector('span');
                     if (svg) {
-                        svg.style.transform = 'scale(1.2)';
+                        svg.style.transform = 'scale(0.8)';
                         const label = svg.getAttribute('aria-label');
                         if (btn.textContent.includes('轉發') || (label && label.includes('轉貼')) || index === 2) {
                             btn.style.transform = 'translateX(-0.3em)';
@@ -136,7 +136,7 @@
 
     function mainLoop() {
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-        document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
+        //document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
     }
 
     mainLoop();
