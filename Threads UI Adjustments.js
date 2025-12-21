@@ -93,6 +93,7 @@
 
     // button move
     function applyButtonStyle(likeIcon) {
+           if (window.location.href.includes('/post/')) return;
 
             let container = likeIcon.parentElement;
             let depth = 0;
