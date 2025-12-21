@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7.1
+// @version      0.7.7.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -19,13 +19,15 @@
         nav svg { transform: scale(0.5) !important; transform-origin: center center !important; }
         div span > span { font-size: 18px !important; }
 
-        .custom-stack-2x2 {
-            display: grid !important;
-            grid-template-columns: repeat(2, 85px) !important;
-            gap: 8px 15px !important;
-            width: fit-content !important;
-            margin-top: 10px !important;
-            align-items: center !important;
+        .custom-stack-move {
+            display: flex !important;
+            justify-content: flex-left !important;
+
+            //grid-template-columns: repeat(4, 1fr) !important;
+            width: 100% !important;
+            margin-top: 0px !important;
+            //justify-items: end !important;
+            //align-items: center !important;
         }
 
 
@@ -89,54 +91,91 @@
         }
     }
 
-    // 3. 2x2 button
+    // button move
     function applyButtonStyle(likeIcon) {
-        let container = likeIcon.parentElement;
-        let depth = 0;
-        while (container && depth < 6) {
-            if (container.children.length >= 3 && container.children.length <= 5) {
-                if (container.dataset.styled) return;
-                container.dataset.styled = '1';
-                container.classList.add('custom-stack-2x2');
 
-                Array.from(container.children).forEach((wrapper, index) => {
-                    wrapper.style.display = 'flex';
-                    wrapper.style.alignItems = 'center';
-                    wrapper.style.justifyContent = 'flex-start';
-                    wrapper.style.minHeight = '14px';
+            let container = likeIcon.parentElement;
+            let depth = 0;
+            while (container && depth < 6) {
+               if (container.children.length >= 3 && container.children.length <= 5) {
+                   if (container.dataset.styled) return;
+                   container.dataset.styled = '1';
+                   container.classList.add('custom-stack-move');
 
-                    const btn = wrapper.querySelector('[role="button"]');
-                    if (!btn) return;
-                    btn.style.display = 'flex';
-                    btn.style.alignItems = 'center';
+                  var plusdistance=0;
+                   Array.from(container.children).forEach((wrapper, index) => {
+                       wrapper.style.display = 'flex';
+                       wrapper.style.alignItems = 'left';
+                       wrapper.style.justifyContent = 'flex-start';
+                       wrapper.style.minHeight = '14px';
 
-                    const svg = btn.querySelector('svg');
-                    const countSpan = btn.querySelector('span');
-                    if (svg) {
-                        svg.style.transform = 'scale(0.8)';
-                        const label = svg.getAttribute('aria-label');
-                        if (btn.textContent.includes('轉發') || (label && label.includes('轉貼')) || index === 2) {
-                            btn.style.transform = 'translateX(-0.3em)';
-                        }
-                    }
-                    if (countSpan && countSpan.innerText.trim() !== "") {
-                        countSpan.style.display = 'inline-flex';
-                        countSpan.style.alignItems = 'center';
-                        countSpan.style.transform = 'translate(5px, 4.2px)';
-                    } else if (countSpan) {
-                        countSpan.style.display = 'none';
-                    }
-                });
-                break;
+
+                       const btn = wrapper.querySelector('[role="button"]');
+                       if (!btn) return;
+                       btn.style.display = 'flex';
+                       btn.style.alignItems = 'left';
+
+                       const svg = btn.querySelector('svg');
+                       const countSpan = btn.querySelector('span');
+                        if (svg) {
+                            svg.style.transform = 'scale(0.8)';
+                            const label = svg.getAttribute('aria-label');
+                            btn.style.transform = 'translateX('+(-1.2*plusdistance)+'em)';
+                            plusdistance=plusdistance+1;
+                       }
+
+
+                    });
+                    break;
+                }
+                container = container.parentElement;
+                depth++;
             }
-            container = container.parentElement;
-            depth++;
-        }
+        adjustButtonGroupPosition(likeIcon);
     }
+
+    function adjustButtonGroupPosition(likeIcon) {
+
+    let potentialGroup = likeIcon.parentElement;
+    for (let i = 0; i < 5; i++) {
+        if (potentialGroup && potentialGroup.querySelectorAll('button, [role="button"]').length >= 3) {
+           break;
+        }
+        potentialGroup = potentialGroup.parentElement;
+    }
+
+
+    // 1. 定位讚按鈕，再找它的群組容器 (role="group")
+
+    const btnGroup = potentialGroup;
+    if (!btnGroup) return;
+    const parent = btnGroup.parentElement;
+    if (!parent) return;
+    // 2. 取得寬度 (使用 offsetWidth 包含 padding)
+    const groupWidth = btnGroup.scrollWidth;
+    const parentWidth = parent.offsetWidth;
+    //parent.style.backgroundColor='pink';
+    // 3. 判斷是否超出
+    if (groupWidth > parentWidth) {
+        const offset = groupWidth - parentWidth;
+
+        // 4. 往左偏移 (使用負的 margin 或 transform)
+        // 這裡我們用 marginLeft 負值來達成「往左便宜」
+        //btnGroup.style.marginLeft = `-${offset}px`;
+
+        // 如果想用位移 (不會影響排版流) 可以改用這行：
+         btnGroup.style.transform = `translateX(-${offset/4+8}px)`;
+
+        //console.log(`[偵測] 群組長度(${groupWidth})大於上層(${parentWidth})，往左偏移 ${offset}px`);
+    } else {
+        // 如果長度沒超出，重置偏移量
+        btnGroup.style.marginLeft = "0px";
+    }
+}
 
     function mainLoop() {
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-        //document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
+        document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
     }
 
     mainLoop();
