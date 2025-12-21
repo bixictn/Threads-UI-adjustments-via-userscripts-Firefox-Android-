@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7.2
+// @version      0.7.7.3
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -21,16 +21,18 @@
 
         .custom-stack-move {
             display: flex !important;
-            justify-content: flex-left !important;
-
-            //grid-template-columns: repeat(4, 1fr) !important;
+            justify-content: flex-end !important;
             width: 100% !important;
             margin-top: 0px !important;
-            //justify-items: end !important;
-            //align-items: center !important;
         }
 
-
+        /* 假設鎖定該 SVG 的父容器 */
+        div[role="button"]:has(svg[aria-label="展開撰寫工具"]) {
+            position: absolute !important;
+            bottom: 8px !important;  /* 距離底部 */
+            right: 8px !important;   /* 距離右側 */
+            z-index: 999;             /* 確保在最上層 */
+         }
     `;
     document.head.appendChild(style);
 
@@ -93,7 +95,6 @@
 
     // button move
     function applyButtonStyle(likeIcon) {
-           if (window.location.href.includes('/post/')) return;
 
             let container = likeIcon.parentElement;
             let depth = 0;
@@ -103,26 +104,24 @@
                    container.dataset.styled = '1';
                    container.classList.add('custom-stack-move');
 
-                  var plusdistance=0;
+                   var plusdistance=3;
                    Array.from(container.children).forEach((wrapper, index) => {
                        wrapper.style.display = 'flex';
-                       wrapper.style.alignItems = 'left';
-                       wrapper.style.justifyContent = 'flex-start';
+                       wrapper.style.alignItems = 'end';
+                       wrapper.style.justifyContent = 'flex-end';
                        wrapper.style.minHeight = '14px';
 
 
                        const btn = wrapper.querySelector('[role="button"]');
                        if (!btn) return;
-                       btn.style.display = 'flex';
-                       btn.style.alignItems = 'left';
-
+                       
                        const svg = btn.querySelector('svg');
                        const countSpan = btn.querySelector('span');
                         if (svg) {
                             svg.style.transform = 'scale(0.8)';
                             const label = svg.getAttribute('aria-label');
-                            btn.style.transform = 'translateX('+(-1.2*plusdistance)+'em)';
-                            plusdistance=plusdistance+1;
+                            btn.style.transform = 'translateX('+(1.2*plusdistance)+'em)';
+                            plusdistance=plusdistance-1;
                        }
 
 
@@ -136,7 +135,7 @@
     }
 
     function adjustButtonGroupPosition(likeIcon) {
-
+    if (window.location.href.includes('/post/')) return;
     let potentialGroup = likeIcon.parentElement;
     for (let i = 0; i < 5; i++) {
         if (potentialGroup && potentialGroup.querySelectorAll('button, [role="button"]').length >= 3) {
@@ -152,28 +151,16 @@
     if (!btnGroup) return;
     const parent = btnGroup.parentElement;
     if (!parent) return;
-    // 2. 取得寬度 (使用 offsetWidth 包含 padding)
-    const groupWidth = btnGroup.scrollWidth;
-    const parentWidth = parent.offsetWidth;
-    //parent.style.backgroundColor='pink';
-    // 3. 判斷是否超出
-    if (groupWidth > parentWidth) {
-        const offset = groupWidth - parentWidth;
+    // 找到 Group 的上層
 
-        // 4. 往左偏移 (使用負的 margin 或 transform)
-        // 這裡我們用 marginLeft 負值來達成「往左便宜」
-        //btnGroup.style.marginLeft = `-${offset}px`;
+    // 強制讓 Parent 變為 Flex 容器並靠右對齊
+    parent.style.display = "flex !important";
+    parent.style.justifyContent = "flex-end !important";
 
-        // 如果想用位移 (不會影響排版流) 可以改用這行：
-         btnGroup.style.transform = `translateX(-${offset/4+8}px)`;
+    btnGroup.style.display = "flex !important";
+    btnGroup.style.justifyContent = "flex-end !important";
 
-        //console.log(`[偵測] 群組長度(${groupWidth})大於上層(${parentWidth})，往左偏移 ${offset}px`);
-    } else {
-        // 如果長度沒超出，重置偏移量
-        btnGroup.style.marginLeft = "0px";
     }
-}
-
     function mainLoop() {
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
