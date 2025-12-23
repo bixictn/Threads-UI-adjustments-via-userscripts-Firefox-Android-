@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7.3
+// @version      0.7.7.4
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -46,6 +46,8 @@
             if(postContainer) postContainer = postContainer.parentElement;
         }
         if (!postContainer) return;
+
+
 
         // time label
         const firstTimeInPost = postContainer.querySelector('time');
@@ -114,7 +116,7 @@
 
                        const btn = wrapper.querySelector('[role="button"]');
                        if (!btn) return;
-                       
+
                        const svg = btn.querySelector('svg');
                        const countSpan = btn.querySelector('span');
                         if (svg) {
@@ -161,9 +163,30 @@
     btnGroup.style.justifyContent = "flex-end !important";
 
     }
+
+    function cleanThreadsContent() {
+    // 抓取所有還沒被處理過且包含 OBJ 的 span
+    const spans = document.querySelectorAll('span:not([data-obj-cleaned])');
+
+    spans.forEach(span => {
+        let hasObj = false;
+        span.childNodes.forEach(node => {
+            if (node.nodeType === 3 && node.nodeValue.includes('\uFFFC')) {
+                node.nodeValue = node.nodeValue.replace(/\uFFFC/g, '');
+                hasObj = true;
+            }
+        });
+        // 標記已處理，避免反覆跑迴圈耗能
+        if (hasObj) {
+            span.setAttribute('data-obj-cleaned', 'true');
+        }
+    });
+}
+
     function mainLoop() {
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
+        cleanThreadsContent();
     }
 
     mainLoop();
