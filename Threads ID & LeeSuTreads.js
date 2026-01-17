@@ -64,8 +64,8 @@
                     const p = document.createElement('div');
                     p.className = "my-cake-plugin";
 
-                    let datePart = titleText.replace(/^.*•\s*/, '').replace(/加入時間[:：]\s*/, '').trim();
-                    let icon = titleText.includes('未分享') ? "🫥 " : "🍰 ";
+                    let datePart = titleText.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim();
+                    let icon = titleText.includes('未分享') ? "🫥" : "📅";
 
                     if (titleText.includes('•')) {
                         p.textContent = icon + datePart + content.replace("⏳", "").trim();
