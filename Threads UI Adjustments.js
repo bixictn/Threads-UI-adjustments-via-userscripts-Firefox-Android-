@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7.4
+// @version      0.7.7.5
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -9,6 +9,21 @@
 // ==/UserScript==
 
 (function() {
+
+    function pushMagicState() {
+        window.history.pushState({ target: "prevent_black_screen" }, "", window.location.href);
+    }
+
+    pushMagicState();
+
+    window.addEventListener('popstate', function(event) {
+        if (!event.state || event.state.target !== "prevent_black_screen") {
+            window.location.reload();
+
+       }
+    });
+
+
     'use strict';
 
     // 1.  CSS
