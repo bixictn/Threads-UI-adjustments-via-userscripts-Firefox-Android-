@@ -2,7 +2,7 @@
 // @name        Threads PWA Gesture Adjustments
 // @match       https://www.threads.com/*
 // @match       https://www.threads.net/*
-// @version     0.1.0
+// @version     0.1.1
 // @description Threads PWA Gesture Adjustments
 // @grant       none
 // @run-at      document-start
@@ -62,16 +62,6 @@
             window.location.reload();
         }
     }, true);
-
-    // 畫面載入檢查
-    window.addEventListener('load', () => {
-        setTimeout(() => {
-            const logo = document.querySelector('a[href="/"], a[href="/home"]');
-            if (logo && isHomePage() && !window.location.hash.includes(TAG)) {
-                logo.click();
-            }
-        }, 1000);
-    });
 
     // 偵測觸碰行為 (Firefox 權限觸發點)
     window.addEventListener('touchstart', () => {
