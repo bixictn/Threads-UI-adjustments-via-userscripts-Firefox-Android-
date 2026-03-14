@@ -1,14 +1,13 @@
 // ==UserScript==
-// @name         Threads Image Gesture & Media Adjustments
+// @name         Threads Image Gesture & Media Icons Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.0.4
-// @description  整合圖片縮放手勢、關閉按鈕移至左上、音量按鈕移至右下
+// @version      0.0.9
+// @description  Threads Image Gesture & Media Icons Adjustments
 // @author       Gemini
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
 // @grant        none
 // ==/UserScript==
-
 
 (function() {
     'use strict';
@@ -20,61 +19,59 @@
             position: relative !important;
             z-index: 9998 !important;
             touch-action: none !important;
-            transition: none !important;
         }
+        /* 透明度類別 */
+        .ts-opaque, .ts-opaque svg, .ts-opaque * { opacity: 1 !important; fill-opacity: 1 !important; }
+        .ts-half, .ts-half svg, .ts-half * { opacity: 0.5 !important; fill-opacity: 0.5 !important; }
     `;
     document.head.appendChild(style);
 
-    // --- 2. 介面動態調整邏輯 ---
+    // --- 2. 介面調整邏輯 (固定位置) ---
     const repositionElements = () => {
-        if (!window.location.pathname.endsWith('/media')) return;
+        const allTitles = document.querySelectorAll('svg title');
 
-        // A. 關閉按鈕 (0,0)
-        const closeIcon = document.querySelector('svg[aria-label="關閉"]');
-        if (closeIcon) {
-            const closeBtn = closeIcon.parentElement?.parentElement;
-            if (closeBtn && closeBtn.getAttribute('role') === 'button') {
-                closeBtn.style.setProperty('position', 'fixed', 'important');
-                closeBtn.style.setProperty('top', '0px', 'important');
-                closeBtn.style.setProperty('left', '0px', 'important');
-                closeBtn.style.setProperty('margin', '0px', 'important');
-                closeBtn.style.setProperty('z-index', '9999', 'important');
+        allTitles.forEach(title => {
+            const text = title.textContent.trim();
+            const btn = title.closest('div[role="button"]');
+            if (!btn) return;
+
+            // 共通定位屬性
+            btn.style.setProperty('position', 'fixed', 'important');
+            btn.style.setProperty('z-index', '9999', 'important');
+
+            // A. 處理「關閉」：左上角 (0,0) + 不透明
+            if (text === "關閉") {
+                btn.style.setProperty('top', '0px', 'important');
+                btn.style.setProperty('left', '0px', 'important');
+                btn.classList.add('ts-opaque');
+                btn.classList.remove('ts-half');
             }
-        }
 
-        // B. 音量按鈕 (根據視窗比例判斷)
-        const muteIcon = document.querySelector('svg[aria-label="已靜音"], svg[aria-label="切換音量設定"], svg[aria-label="音量"]');
-        if (muteIcon) {
-            const muteBtn = muteIcon.parentElement?.parentElement;
-            if (muteBtn && muteBtn.getAttribute('role') === 'button') {
-                muteBtn.style.setProperty('position', 'fixed', 'important');
-                muteBtn.style.setProperty('z-index', '9999', 'important');
-                muteBtn.style.setProperty('transform', 'none', 'important');
+            // B. 處理「音量/靜音」：固定右下角 + 動態透明度
+            if (text.includes("靜音") || text.includes("播放")){
+                btn.style.setProperty('bottom', '0px', 'important');
+                btn.style.setProperty('right', '0px', 'important');
+                btn.style.setProperty('top', 'auto', 'important');
+                btn.style.setProperty('left', 'auto', 'important');
+                btn.style.setProperty('transform', 'none', 'important');
 
-                // --- 核心判斷：視窗寬度 vs 視窗高度 ---
-                const isScreenPortrait = window.innerWidth < window.innerHeight;
+                // 判斷透明度：只有「已靜音」才不透明
+                if (text === "已靜音") {
 
-                if (isScreenPortrait) {
-                    // 螢幕直向 (一般手機拿法)：音量鈕靠右下角，留一點點邊距
-                    muteBtn.style.setProperty('bottom', '-50px', 'important');
-                    muteBtn.style.setProperty('right', '0px', 'important');
-                    muteBtn.style.setProperty('top', 'auto', 'important');
-                    muteBtn.style.setProperty('left', 'auto', 'important');
+                    btn.classList.add('ts-opaque');
+                    btn.classList.remove('ts-half');
                 } else {
-                    // 螢幕橫向 (手機橫拿或電腦螢幕)：音量鈕移到最右側，中間偏下
-                    muteBtn.style.setProperty('bottom', '0px', 'important');
-                    muteBtn.style.setProperty('right', '-50px', 'important');
-                    muteBtn.style.setProperty('top', 'auto', 'important');
-                    muteBtn.style.setProperty('left', 'auto', 'important');
+                    btn.classList.add('ts-half');
+                    btn.classList.remove('ts-opaque');
+
                 }
             }
-        }
+        });
     };
 
-    // --- 3. 圖片縮放手勢功能 ---
-    function zoom(img) {
+    // --- 3. 圖片縮放功能 (維持嚴格邊界限制) ---
+    function setupImageZoom(img) {
         let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, initialDist = 0;
-
         img.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 startX = e.touches[0].pageX - pointX;
@@ -85,7 +82,6 @@
             img.style.transition = "none";
             img.classList.add('zoom-active');
         });
-
         img.addEventListener('touchmove', (e) => {
             if (e.touches.length === 1 && scale > 1) {
                 e.preventDefault();
@@ -98,16 +94,18 @@
                 img.style.transform = `translate3d(${pointX}px, ${pointY}px, 0) scale(${scale})`;
             } else if (e.touches.length === 2) {
                 e.preventDefault();
-                const currentDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-                const zoomFactor = currentDist / initialDist;
-                scale = Math.min(Math.max(1, scale * zoomFactor), 5);
+                const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                scale = Math.min(Math.max(1, scale * (dist / initialDist)), 5);
+                const maxScrollX = Math.max(0, (img.offsetWidth * scale - window.innerWidth) / 2);
+                const maxScrollY = Math.max(0, (img.offsetHeight * scale - window.innerHeight) / 2);
+                pointX = Math.max(-maxScrollX, Math.min(maxScrollX, pointX));
+                pointY = Math.max(-maxScrollY, Math.min(maxScrollY, pointY));
                 img.style.transform = `translate3d(${pointX}px, ${pointY}px, 0) scale(${scale})`;
-                initialDist = currentDist;
+                initialDist = dist;
             }
         });
-
-        img.addEventListener('touchend', (e) => {
-            if (e.touches.length === 0 && scale < 1.1) {
+        img.addEventListener('touchend', () => {
+            if (scale < 1.1) {
                 scale = 1; pointX = 0; pointY = 0;
                 img.style.transition = "transform 0.3s ease";
                 img.style.transform = `translate3d(0, 0, 0) scale(1)`;
@@ -116,26 +114,25 @@
         });
     }
 
-    function setupZoom() {
-        document.querySelectorAll('img:not([data-zoom-setup])').forEach(img => {
-            if (img.offsetWidth < 50) return;
-            img.dataset.zoomSetup = "true";
-            zoom(img);
-        });
-    }
-
     // --- 4. 監控與執行 ---
-    const observer = new MutationObserver(() => {
+    const runAll = () => {
         repositionElements();
-        setupZoom();
-    });
+        document.querySelectorAll('img:not([data-zoom-setup])').forEach(img => {
+            if (img.offsetWidth > 50) {
+                img.dataset.zoomSetup = "true";
+                setupImageZoom(img);
+            }
+        });
+    };
 
+    const observer = new MutationObserver(runAll);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // 監聽視窗尺寸改變 (旋轉手機時即時觸發)
-    window.addEventListener('resize', repositionElements);
-    window.addEventListener('popstate', repositionElements);
+    window.addEventListener('resize', runAll);
+    window.addEventListener('click', () => {
+        setTimeout(runAll, 200);
+        setTimeout(runAll, 800);
+    });
 
-    repositionElements();
-    setupZoom();
+    runAll();
 })();
