@@ -35,12 +35,10 @@
             const btn = title.closest('div[role="button"]');
             if (!btn) return;
 
-            // 共通定位屬性
-            btn.style.setProperty('position', 'fixed', 'important');
-            btn.style.setProperty('z-index', '9999', 'important');
-
             // A. 處理「關閉」：左上角 (0,0) + 不透明
             if (text === "關閉") {
+                btn.style.setProperty('position', 'fixed', 'important');
+                btn.style.setProperty('z-index', '9999', 'important');
                 btn.style.setProperty('top', '0px', 'important');
                 btn.style.setProperty('left', '0px', 'important');
                 btn.classList.add('ts-opaque');
@@ -49,6 +47,8 @@
 
             // B. 處理「音量/靜音」：固定右下角 + 動態透明度
             if (text.includes("靜音") || text.includes("播放")){
+                btn.style.setProperty('position', 'fixed', 'important');
+                btn.style.setProperty('z-index', '9999', 'important');
                 btn.style.setProperty('bottom', '0px', 'important');
                 btn.style.setProperty('right', '0px', 'important');
                 btn.style.setProperty('top', 'auto', 'important');
