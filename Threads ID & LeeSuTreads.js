@@ -94,10 +94,6 @@
             btn.style.height = '0';
         });
     }
-
-    // 提高巡檢頻率
-    setInterval(doSmartMove, 500);
-
     // 監聽 DOM 變動與捲動
     const observer = new MutationObserver(doSmartMove);
     observer.observe(document.body, { childList: true, subtree: true });
