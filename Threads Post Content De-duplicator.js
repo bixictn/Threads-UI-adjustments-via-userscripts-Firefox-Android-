@@ -75,13 +75,5 @@
     const observer = new MutationObserver(() => window.requestAnimationFrame(doCleanup));
     observer.observe(document.body, { childList: true, subtree: true });
 
-    let lastUrl = location.href;
-    setInterval(() => {
-        if (location.href !== lastUrl) {
-            lastUrl = location.href;
-            doCleanup();
-        }
-    }, 1000);
-
     doCleanup();
 })();
