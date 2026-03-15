@@ -192,6 +192,5 @@
     mainLoop();
     const observer = new MutationObserver(() => mainLoop());
     observer.observe(document.body, { childList: true, subtree: true });
-    setInterval(mainLoop, 500);
 
 })();  
