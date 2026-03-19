@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.1.2
+// @version      0.1.4
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -15,35 +15,28 @@
     const TAG = "#pwa_guard";
     const SESSION_KEY = "pwa_guard_session_alerted";
     let isDeployed = false;
+    let lastPath = window.location.pathname; // 記錄上一個路徑
 
-    // 檢查是否為首頁
     function isHomePage() {
         return window.location.pathname === "/" ||
                window.location.pathname === "/home";
     }
 
-    // 執行佈署邏輯
     function doDeploy() {
         if (!isHomePage()) return;
         if (window.location.hash.includes(TAG)) return;
 
-        // 檢查此 Session (分頁) 是否已經 alert 過
         const hasAlerted = sessionStorage.getItem(SESSION_KEY);
-
         if (!hasAlerted) {
-            // 第一次開啟分頁時跳出，協助取得網址變更權限
             alert("強化返回機制已啟動，避免跳出 Threads。");
             sessionStorage.setItem(SESSION_KEY, "true");
         }
 
         try {
             const baseUrl = window.location.pathname + window.location.search;
-
-            // 產生歷史節點：[Base] -> [Guard]
             history.replaceState({pwa: "base"}, "", baseUrl);
             history.pushState({pwa: "guard"}, "", baseUrl + TAG);
 
-            // 強制檢查網址變更狀況
             setTimeout(() => {
                 if (!window.location.hash.includes(TAG)) {
                     window.location.assign(baseUrl + TAG);
@@ -58,26 +51,28 @@
 
     // --- 監聽區 ---
 
-    // 偵測返回鍵：執行重新整理 (Reload) 釋放記憶體
     window.addEventListener('popstate', (e) => {
-        if (isHomePage() && !window.location.hash.includes(TAG)) {
-            // 當偵測到試圖跳離首頁時，強制重新整理頁面
-            // 這會清空 SPA 累積的 DOM 節點與記憶體洩漏
+        const currentPath = window.location.pathname;
+
+        // 只有當「前一個頁面是首頁」且「現在也是首頁」且「沒有 Guard 標籤」時才重整
+        // 這樣從 /post/... 返回首頁時，就不會觸發重整
+        if (isHomePage() && lastPath === currentPath && !window.location.hash.includes(TAG)) {
             window.location.reload();
         }
+
+        lastPath = currentPath; // 更新路徑記錄
     }, true);
 
-    // 偵測觸碰行為 (觸發點)
     window.addEventListener('touchstart', () => {
         if (!isDeployed) doDeploy();
     }, { passive: true });
 
-    // 攔截 Threads 內部的 SPA 換頁邏輯
     const _ps = history.pushState;
     history.pushState = function() {
         _ps.apply(this, arguments);
+        lastPath = window.location.pathname; // 換頁時同步更新路徑
         if (isHomePage()) {
-            isDeployed = false; // 回到首頁時標記為未佈署，以便下次 touch 時重新觸發
+            isDeployed = false;
         }
     };
 
