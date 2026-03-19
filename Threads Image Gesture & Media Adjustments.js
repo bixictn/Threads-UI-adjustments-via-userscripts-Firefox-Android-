@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Image Gesture & Media Icons Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.0.9
+// @version      0.1.0
 // @description  Threads Image Gesture & Media Icons Adjustments
 // @author       Gemini
 // @match        https://www.threads.net/*
@@ -28,6 +28,7 @@
 
     // --- 2. 介面調整邏輯 (固定位置) ---
     const repositionElements = () => {
+        if (!window.location.pathname.endsWith('/media')) return;
         const allTitles = document.querySelectorAll('svg title');
 
         allTitles.forEach(title => {
@@ -35,8 +36,10 @@
             const btn = title.closest('div[role="button"]');
             if (!btn) return;
 
+
             // A. 處理「關閉」：左上角 (0,0) + 不透明
             if (text === "關閉") {
+
                 btn.style.setProperty('position', 'fixed', 'important');
                 btn.style.setProperty('z-index', '9999', 'important');
                 btn.style.setProperty('top', '0px', 'important');
