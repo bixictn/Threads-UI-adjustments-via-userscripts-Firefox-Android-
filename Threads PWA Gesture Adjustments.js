@@ -54,6 +54,11 @@
     function doDeploy() {
         if (!isHomePage() || window.location.hash.includes(TAG)) return;
         try {
+            const hasAlerted = sessionStorage.getItem(SESSION_KEY);
+            if (!hasAlerted) {
+                alert("強化返回機制已啟動，避免跳出 Threads。");
+                sessionStorage.setItem(SESSION_KEY, "true");
+            }
             const baseUrl = window.location.pathname + window.location.search;
             history.replaceState({pwa: "base"}, "", baseUrl);
             history.pushState({pwa: "guard"}, "", baseUrl + TAG);
