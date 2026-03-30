@@ -80,7 +80,7 @@
                 globalUserCache.set(username);
                 badge.style.display = "none";
                 badge.style.visibility = "hidden";
-                badge.style.height = '0';
+                //badge.style.height = '0';
                 badge.style.position = 'absolute';
             }
         });
@@ -91,7 +91,7 @@
         allPossibleButtons.forEach(btn => {
             btn.style.display = "none";
             btn.style.visibility = "hidden";
-            btn.style.height = '0';
+            //btn.style.height = '0';
         });
     }
     // 監聽 DOM 變動與捲動
