@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Threads ID & Lee Su Threads
 // @namespace    http://tampermonkey.net/
-// @version      0.1.6
-// @description  Show Date
+// @version      0.2.0
+// @description  Threads ID & Lee Su Thread
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
 // @grant        none
@@ -10,93 +10,94 @@
 
 (function() {
     'use strict';
-    const globalUserCache = new Map();
 
-    function doSmartMove() {
-        const badges = document.querySelectorAll('[class*="threads-"][title]');
+    const style = document.createElement('style');
+    style.textContent = `
+        .cake-avatar-anchor { position: relative !important; }
+        .cake-avatar-anchor::after {
+            content: attr(data-cake-date) !important;
+            white-space: pre !important;
+            line-height: 1.1 !important;
+            text-align: center !important;
+            position: absolute !important;
+            top: 100% !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            margin-top: 4px !important;
+            color: #999999 !important;
+            font-size: 9px !important;
+            font-weight: 400 !important;
+            pointer-events: none !important;
+            z-index: 5 !important;
+            display: block !important;
+        }
+    `;
+    document.head.appendChild(style);
 
-        badges.forEach(badge => {
+    function doSmartSync() {
+        const containers = document.querySelectorAll('article, [data-pressable-container="true"]');
+
+        containers.forEach(scope => {
+            const badge = scope.querySelector('[class*="threads-"][title]');
+
+            if (!badge) return;
+
             const titleText = badge.title || "";
             const content = badge.innerText || "";
 
-            // --- 狀況 A：正在載入中 (出現⏳) ---
-            if (content.includes("⏳")) {
-                badge.style.opacity = "0"; // 讓漏斗透明，但繼續跑
-                badge.style.pointerEvents = "none";
-                return;
-            }
+            // --- 核心改動：如果發現插件在那但沒資料 (長 ID 情況)，就直接點它 ---
+            if (content.includes("⏳") || !titleText.includes("加入時間")) {
+                // 找尋插件內部的按鈕節點
+                const innerBtn = badge.querySelector('button, [role="button"]') || badge;
 
-            // --- 狀況 B：沒日期 (Get location) -> 顯示按鈕 ---
-            if (!titleText.includes("加入時間")) {
-                badge.style.display = "";
-                badge.style.visibility = "visible";
-                badge.style.opacity = "1";
-                badge.style.pointerEvents = "auto";
-                return;
-            }
+                if (innerBtn && !badge.dataset.cakeClicked) {
+                    badge.dataset.cakeClicked = "true"; // 標記已點擊
 
-            // --- 狀況 C：已有日期 (不論是剛按完還是原本就有) -> 執行搬移 ---
-            const scope = badge.closest('article') || badge.closest('[data-pressable-container="true"]');
-            if (!scope) return;
+                    // 執行模擬點擊，強制插件更新 title
+                    innerBtn.click();
 
-            // 抓取 Username (優先從屬性，次之從連結)
-            let username = badge.getAttribute('data-username');
-            if (!username) {
-                const userLink = scope.querySelector('a[href*="/@"]');
-                if (userLink) {
-                    username = userLink.getAttribute('href').split('/@')[1].split(/[?\/]/)[0];
+                    // 點擊後極速嘗試關閉可能彈出的視窗
+                    setTimeout(() => {
+                        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+                    }, 5);
                 }
+                return;
             }
-            if (!username) return;
-            if(globalUserCache.has(username)) hideAllButtonsByUsername(username);
 
-            // 尋找上方 ID 連結位置
-            const idLinks = Array.from(scope.querySelectorAll('a[href*="/@"]'));
-            const target = idLinks.find(link =>
-                link.innerText.trim().length > 0 &&
-                !link.querySelector('img') &&
-                link.getAttribute('href').includes(`/@${username}`)
-            );
+            // --- 解析日期與多行內容 ([新帳號] 換行) ---
+            let datePart = titleText.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim();
+            let icon = titleText.includes('未分享') ? "🫥" : "📅";
+            let cleanContent = content.replace("⏳", "").trim();
 
-            if (target) {
-                // 執行搬移標註
-                if (!target.previousElementSibling || !target.previousElementSibling.classList.contains("my-cake-plugin")) {
-                    const p = document.createElement('div');
-                    p.className = "my-cake-plugin";
+            let finalData = icon + datePart;
+            if (cleanContent) {
+                let formattedContent = cleanContent.replace("[新帳號]", "\n[新帳號]").trim();
+                finalData += "\n" + formattedContent;
+            }
 
-                    let datePart = titleText.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim();
-                    let icon = titleText.includes('未分享') ? "🫥" : "📅";
-
-                    if (titleText.includes('•')) {
-                        p.textContent = icon + datePart + content.replace("⏳", "").trim();
-                    } else {
-                        p.textContent = titleText;
+            // --- 投影到頭貼 ---
+            const avatarImg = scope.querySelector('img');
+            if (avatarImg) {
+                const avatarContainer = avatarImg.parentElement?.parentElement;
+                if (avatarContainer) {
+                    if (!avatarContainer.classList.contains("cake-avatar-anchor")) {
+                        avatarContainer.classList.add("cake-avatar-anchor");
                     }
-
-                    p.style.cssText = 'color: #808080; font-size: 13px; font-weight: 400; margin-bottom: 3px; display: block;';
-                    target.before(p);
+                    if (avatarContainer.getAttribute('data-cake-date') !== finalData) {
+                        avatarContainer.setAttribute('data-cake-date', finalData);
+                    }
                 }
-                hideAllButtonsByUsername(username);
-                globalUserCache.set(username);
-                badge.style.display = "none";
-                badge.style.visibility = "hidden";
-                //badge.style.height = '0';
-                badge.style.position = 'absolute';
             }
+
+            // 隱藏原始插件 (確保不影響高度，解決回跳位移)
+            badge.style.setProperty('display', 'none', 'important');
         });
     }
 
-    function hideAllButtonsByUsername(username) {
-        const allPossibleButtons = document.querySelectorAll(`button[data-username="${username}"]`);
-        allPossibleButtons.forEach(btn => {
-            btn.style.display = "none";
-            btn.style.visibility = "hidden";
-            //btn.style.height = '0';
-        });
-    }
-    // 監聽 DOM 變動與捲動
-    const observer = new MutationObserver(doSmartMove);
-    observer.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener('scroll', doSmartMove, { passive: true });
+    const observer = new MutationObserver(() => window.requestAnimationFrame(doSmartSync));
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['title'] });
+    window.addEventListener('scroll', doSmartSync, { passive: true });
 
+    setInterval(doSmartSync, 1500); // 縮短檢查時間，讓長 ID 偵測更快
+    doSmartSync();
 })();
