@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.8.0.0
+// @version      0.8.1
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -11,73 +11,71 @@
 (function() {
     'use strict';
 
-    // 1.  CSS
+    // 1. CSS 基礎樣式注入
     const style = document.createElement('style');
     style.textContent = `
+        /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
+
+        /* 導覽列圖示縮小 */
         nav svg { transform: scale(0.5) !important; transform-origin: center center !important; }
+
+        /* 內文放大 */
         div span > span { font-size: 18px !important; }
 
-        a[href*="/@"],
-        a[href*="/@"] span {
-            color: #D4AF37 !important;
-            font-size: 14px !important;
-            font-weight: bold !important;
-            text-decoration: none !important;
-        }
-
+        /* 按鈕列靠右容器樣式 */
         .custom-stack-move {
             display: flex !important;
             justify-content: flex-end !important;
             width: 100% !important;
-            margin-top: 0px !important;
         }
-
-        /* 假設鎖定該 SVG 的父容器 */
-        div[role="button"]:has(svg[aria-label="展開撰寫工具"]) {
-            position: absolute !important;
-            bottom: 8px !important;  /* 距離底部 */
-            right: 8px !important;   /* 距離右側 */
-            z-index: 999;             /* 確保在最上層 */
-         }
     `;
     document.head.appendChild(style);
 
-    // 2.  ID
+    // 2. 核心：ID、時間、主題標籤格式化
     function applyIdReformat(timeEl) {
         if (timeEl.dataset.processed === "done") return;
 
-        // 1. 尋找容器 (維持你原本的 parentElement 迴圈邏輯)
-        let postContainer = timeEl.parentElement;
-        for(let i=0; i<8; i++) {
-            if(postContainer && (postContainer.tagName === 'ARTICLE' || postContainer.getAttribute('data-testid') === 'post-container')) break;
-            if(postContainer) postContainer = postContainer.parentElement;
-        }
-        if (!postContainer) return;
-
-        // 2. 確保只處理第一筆時間標籤
-        const firstTimeInPost = postContainer.querySelector('time');
-        if (timeEl !== firstTimeInPost) {
-            timeEl.dataset.processed = "done";
-            return;
+        let featureLayer = timeEl.parentElement;
+        let foundFeature = false;
+        for (let i = 0; i < 8; i++) {
+            if (featureLayer && featureLayer.getAttribute('style')?.includes('--x-columnGap')) {
+                foundFeature = true;
+                break;
+            }
+            if (featureLayer) featureLayer = featureLayer.parentElement;
+            else break;
         }
 
-        // 3. 抓取三個關鍵節點
-        const idElement = postContainer.querySelector('a[href*="/@"]:not(:has(img))');
-        const subjectLink = postContainer.querySelector('a[href*="/search?q="]');
+        if (foundFeature && featureLayer) {
+            const postContainer = featureLayer;
 
-        // --- 核心樣式修改 (位置不動，僅改顏色與字體) ---
-        if (idElement) {
+            // 確保是該貼文的第一個時間標籤 (避免重複處理回覆內容)
+            const firstTimeInPost = postContainer.querySelector('time');
+            if (timeEl !== firstTimeInPost) {
+                timeEl.dataset.processed = "done";
+                return;
+            }
+            const idElement = postContainer.querySelector('a[href*="/@"]:not(:has(img))');
+            idElement.style.setProperty('color', '#D4AF37', 'important');
+            idElement.style.setProperty('font-size', '14px' ,'important');
+            idElement.style.setProperty('font-weight', 'bold' ,'important');
+            idElement.style.setProperty('text-decoration', 'none', 'important');
 
-            // B. 時間改灰色 (維持在原位，不隱藏)
+            if (!idElement.dataset.formatted) {
+                    const tagText = idElement.innerText.trim().replace(/[<>]/g, '');
+                    idElement.innerText = `${tagText}`;
+                    idElement.dataset.formatted = "true";
+            }
+
+            // A. 時間樣式修正與自動補「前」字
             timeEl.style.setProperty('color', '#A0A0A0', 'important');
             timeEl.style.setProperty('font-size', '12px', 'important');
             timeEl.style.setProperty('font-weight', 'normal', 'important');
             timeEl.style.setProperty('visibility', 'visible', 'important');
             timeEl.style.setProperty('display', 'inline', 'important');
 
-            // 加上「前」字 (如果需要)
             if (!timeEl.dataset.formatted) {
                 const rawTime = timeEl.textContent.trim();
                 if (!rawTime.includes('-') && !rawTime.includes('前')) {
@@ -86,7 +84,8 @@
                 timeEl.dataset.formatted = "true";
             }
 
-            // C. Subject 改藍色 (維持在原位，僅改樣式)
+            // B. 主題標籤 (Hashtag / Search Link) 改藍色加粗
+            const subjectLink = postContainer.querySelector('a[href*="/search?q="]');
             if (subjectLink) {
                 subjectLink.style.setProperty('color', '#0095f6', 'important');
                 subjectLink.style.setProperty('font-size', '15px', 'important');
@@ -104,101 +103,100 @@
         }
     }
 
-    // button move
+    // 3. 核心：僅限首篇的內文縮排 (針對 /post/ 頁面)
+    function handleFirstPostIndent() {
+        if (!window.location.href.includes('/post/')) return;
+
+        // 利用 CSS 特徵 (--x-columnGap) 抓取頁面上所有 ID/時間列的特徵層
+        const allHeaders = Array.from(document.querySelectorAll('div[style*="--x-columnGap"]'));
+        if (allHeaders.length === 0) return;
+
+        // 物理位置上的第一個 Header 必定是主貼文
+        const firstHeader = allHeaders[0];
+        const idWrapper = firstHeader.parentElement?.parentElement;
+
+        if (idWrapper) {
+            // 內文通常是 ID 容器的下一個兄弟節點
+            let contentNode = idWrapper.nextElementSibling;
+
+            // 跳過空節點，直到抓到真正的內容區
+            while (contentNode && contentNode.innerText.trim() === "" && contentNode.nextElementSibling) {
+                contentNode = contentNode.nextElementSibling;
+            }
+
+            if (contentNode && !contentNode.dataset.indentDone) {
+                // 執行縮排 50px 並重新計算寬度
+                contentNode.style.setProperty('margin-left', '50px', 'important');
+                contentNode.style.setProperty('width', 'calc(100% - 50px)', 'important');
+                contentNode.dataset.indentDone = "true";
+            }
+        }
+    }
+
+    // 4. 按鈕列靠右邏輯 (讚、回覆、轉發)
     function applyButtonStyle(likeIcon) {
+        let container = likeIcon.parentElement;
+        for(let i=0; i<6; i++) {
+            // 尋找包含 3-5 個子元素的按鈕群組容器
+            if (container && container.children.length >= 3 && container.children.length <= 5) {
+                if (container.dataset.styled) break;
+                container.dataset.styled = '1';
+                container.classList.add('custom-stack-move');
 
-            let container = likeIcon.parentElement;
-            let depth = 0;
-            while (container && depth < 6) {
-               if (container.children.length >= 3 && container.children.length <= 5) {
-                   if (container.dataset.styled) return;
-                   container.dataset.styled = '1';
-                   container.classList.add('custom-stack-move');
-
-                   var plusdistance=3;
-                   Array.from(container.children).forEach((wrapper, index) => {
-                       wrapper.style.display = 'flex';
-                       wrapper.style.alignItems = 'end';
-                       wrapper.style.justifyContent = 'flex-end';
-                       wrapper.style.minHeight = '14px';
-
-
-                       const btn = wrapper.querySelector('[role="button"]');
-                       if (!btn) return;
-
-                       const svg = btn.querySelector('svg');
-                       const countSpan = btn.querySelector('span');
+                let plusdistance = 3;
+                Array.from(container.children).forEach((wrapper) => {
+                    wrapper.style.display = 'flex';
+                    wrapper.style.justifyContent = 'flex-end';
+                    const btn = wrapper.querySelector('[role="button"]');
+                    if (btn) {
+                        const svg = btn.querySelector('svg');
                         if (svg) {
                             svg.style.transform = 'scale(0.8)';
-                            const label = svg.getAttribute('aria-label');
-                            btn.style.transform = 'translateX('+(1.2*plusdistance)+'em)';
-                            plusdistance=plusdistance-1;
-                       }
+                            // 根據按鈕順序進行微調位移
+                            btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
+                            plusdistance--;
+                        }
+                    }
+                });
+                break;
+            }
+            if(container) container = container.parentElement;
+        }
+    }
 
-
-                    });
-                    break;
+    // 5. 清理內容中的特殊字元 (如 \uFFFC)
+    function cleanContent() {
+        document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
+            let hasObj = false;
+            span.childNodes.forEach(node => {
+                if (node.nodeType === 3 && node.nodeValue.includes('\uFFFC')) {
+                    node.nodeValue = node.nodeValue.replace(/\uFFFC/g, '');
+                    hasObj = true;
                 }
-                container = container.parentElement;
-                depth++;
-            }
-        adjustButtonGroupPosition(likeIcon);
-    }
-
-    function adjustButtonGroupPosition(likeIcon) {
-    if (window.location.href.includes('/post/')) return;
-    let potentialGroup = likeIcon.parentElement;
-    for (let i = 0; i < 5; i++) {
-        if (potentialGroup && potentialGroup.querySelectorAll('button, [role="button"]').length >= 3) {
-           break;
-        }
-        potentialGroup = potentialGroup.parentElement;
-    }
-
-
-    // 1. 定位讚按鈕，再找它的群組容器 (role="group")
-
-    const btnGroup = potentialGroup;
-    if (!btnGroup) return;
-    const parent = btnGroup.parentElement;
-    if (!parent) return;
-    // 找到 Group 的上層
-
-    // 強制讓 Parent 變為 Flex 容器並靠右對齊
-    parent.style.display = "flex !important";
-    parent.style.justifyContent = "flex-end !important";
-
-    btnGroup.style.display = "flex !important";
-    btnGroup.style.justifyContent = "flex-end !important";
-
-    }
-
-    function cleanThreadsContent() {
-    // 抓取所有還沒被處理過且包含 OBJ 的 span
-    const spans = document.querySelectorAll('span:not([data-obj-cleaned])');
-
-    spans.forEach(span => {
-        let hasObj = false;
-        span.childNodes.forEach(node => {
-            if (node.nodeType === 3 && node.nodeValue.includes('\uFFFC')) {
-                node.nodeValue = node.nodeValue.replace(/\uFFFC/g, '');
-                hasObj = true;
-            }
+            });
+            if (hasObj) span.setAttribute('data-obj-cleaned', 'true');
         });
-        // 標記已處理，避免反覆跑迴圈耗能
-        if (hasObj) {
-            span.setAttribute('data-obj-cleaned', 'true');
-        }
-    });
-}
-
-    function mainLoop() {
-        document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-        document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
-        cleanThreadsContent();
     }
 
+    // 主執行迴圈：整合所有處理邏輯
+    function mainLoop() {
+        // 1. 處理 ID 與時間格式
+        document.querySelectorAll('time').forEach(t => applyIdReformat(t));
+
+        // 2. 處理詳細頁首篇縮排 (獨立執行，解決 SPA 切換問題)
+        handleFirstPostIndent();
+
+        // 3. 處理按鈕靠右
+        document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
+
+        // 4. 清理特殊字元
+        cleanContent();
+    }
+
+    // 初始啟動
     mainLoop();
+
+    // 監控網頁 DOM 變化，自動處理動態載入的內容
     const observer = new MutationObserver(() => mainLoop());
     observer.observe(document.body, { childList: true, subtree: true });
 
