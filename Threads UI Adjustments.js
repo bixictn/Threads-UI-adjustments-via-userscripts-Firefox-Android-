@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.8.1
+// @version      0.8.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -38,18 +38,16 @@
         if (timeEl.dataset.processed === "done") return;
 
         let featureLayer = timeEl.parentElement;
-        let foundFeature = false;
         for (let i = 0; i < 8; i++) {
             if (featureLayer && featureLayer.getAttribute('style')?.includes('--x-columnGap')) {
-                foundFeature = true;
+                featureLayer = featureLayer.parentElement;
                 break;
             }
-            if (featureLayer) featureLayer = featureLayer.parentElement;
-            else break;
+            featureLayer = featureLayer.parentElement;
         }
 
-        if (foundFeature && featureLayer) {
-            const postContainer = featureLayer;
+
+       const postContainer = featureLayer;
 
             // 確保是該貼文的第一個時間標籤 (避免重複處理回覆內容)
             const firstTimeInPost = postContainer.querySelector('time');
@@ -100,7 +98,7 @@
             }
 
             timeEl.dataset.processed = "done";
-        }
+
     }
 
     // 3. 核心：僅限首篇的內文縮排 (針對 /post/ 頁面)
