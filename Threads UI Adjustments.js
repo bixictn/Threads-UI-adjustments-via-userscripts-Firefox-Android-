@@ -1,7 +1,7 @@
-              // ==UserScript==
+// ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.7.7.4
+// @version      0.8.0.0
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -18,6 +18,14 @@
         html, body { overflow-x: hidden !important; }
         nav svg { transform: scale(0.5) !important; transform-origin: center center !important; }
         div span > span { font-size: 18px !important; }
+
+        a[href*="/@"],
+        a[href*="/@"] span {
+            color: #D4AF37 !important;
+            font-size: 14px !important;
+            font-weight: bold !important;
+            text-decoration: none !important;
+        }
 
         .custom-stack-move {
             display: flex !important;
@@ -40,6 +48,7 @@
     function applyIdReformat(timeEl) {
         if (timeEl.dataset.processed === "done") return;
 
+        // 1. 尋找容器 (維持你原本的 parentElement 迴圈邏輯)
         let postContainer = timeEl.parentElement;
         for(let i=0; i<8; i++) {
             if(postContainer && (postContainer.tagName === 'ARTICLE' || postContainer.getAttribute('data-testid') === 'post-container')) break;
@@ -47,51 +56,51 @@
         }
         if (!postContainer) return;
 
-
-
-        // time label
+        // 2. 確保只處理第一筆時間標籤
         const firstTimeInPost = postContainer.querySelector('time');
         if (timeEl !== firstTimeInPost) {
             timeEl.dataset.processed = "done";
             return;
         }
 
+        // 3. 抓取三個關鍵節點
         const idElement = postContainer.querySelector('a[href*="/@"]:not(:has(img))');
         const subjectLink = postContainer.querySelector('a[href*="/search?q="]');
 
+        // --- 核心樣式修改 (位置不動，僅改顏色與字體) ---
         if (idElement) {
-            const infoLine = document.createElement('div');
-            infoLine.style.cssText = 'top: 0 !important;left: 0 !important; font-size: 13px !important;color: #777 !important;   font-weight: normal !important;overflow: hidden !important;max-width: 250px !important;display: block !important;white-space: normal !important;    line-height: 1.5 !important;    pointer-events: auto !important; padding: 2px 4px !important;';
-            const t = document.createElement('span');
-            const rawTime = timeEl.textContent.trim();
 
-            // Date check
-            const isDateForm = rawTime.includes('-');
-            t.textContent = isDateForm ? rawTime : (rawTime + "前");
+            // B. 時間改灰色 (維持在原位，不隱藏)
+            timeEl.style.setProperty('color', '#A0A0A0', 'important');
+            timeEl.style.setProperty('font-size', '12px', 'important');
+            timeEl.style.setProperty('font-weight', 'normal', 'important');
+            timeEl.style.setProperty('visibility', 'visible', 'important');
+            timeEl.style.setProperty('display', 'inline', 'important');
 
-            t.style.cssText = 'color: #777;';
-            infoLine.appendChild(t);
-
-            let hasSubject = false;
-            if (subjectLink) {
-                const s = document.createElement('a');
-                s.href = subjectLink.href;
-                s.textContent = `<${subjectLink.innerText.trim()}>`;
-                s.style.cssText = 'color: #0095f6; font-size:16px;font-weight: bold; text-decoration: none;';
-                s.onmouseover = () => { s.style.textDecoration = 'underline'; };
-                s.onmouseout = () => { s.style.textDecoration = 'none'; };
-                infoLine.appendChild(s);
-                subjectLink.style.display = 'none';
-                hasSubject = true;
+            // 加上「前」字 (如果需要)
+            if (!timeEl.dataset.formatted) {
+                const rawTime = timeEl.textContent.trim();
+                if (!rawTime.includes('-') && !rawTime.includes('前')) {
+                    timeEl.innerText = rawTime + "前";
+                }
+                timeEl.dataset.formatted = "true";
             }
-            const br = document.createElement('br');
-            idElement.after(br);
-            idElement.after(infoLine);
+
+            // C. Subject 改藍色 (維持在原位，僅改樣式)
+            if (subjectLink) {
+                subjectLink.style.setProperty('color', '#0095f6', 'important');
+                subjectLink.style.setProperty('font-size', '15px', 'important');
+                subjectLink.style.setProperty('font-weight', 'bold', 'important');
+                subjectLink.style.setProperty('text-decoration', 'none', 'important');
+
+                if (!subjectLink.dataset.formatted) {
+                    const tagText = subjectLink.innerText.trim().replace(/[<>]/g, '');
+                    subjectLink.innerText = `${tagText}`;
+                    subjectLink.dataset.formatted = "true";
+                }
+            }
 
             timeEl.dataset.processed = "done";
-            timeEl.style.visibility = 'hidden';
-            timeEl.style.height = '0';
-            timeEl.style.position = 'absolute';
         }
     }
 
@@ -193,4 +202,4 @@
     const observer = new MutationObserver(() => mainLoop());
     observer.observe(document.body, { childList: true, subtree: true });
 
-})();  
+})();
