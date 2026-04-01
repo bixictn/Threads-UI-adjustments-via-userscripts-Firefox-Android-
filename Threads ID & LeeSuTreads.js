@@ -1,6 +1,8 @@
 // ==UserScript==
 // @name         Threads ID & Lee Su Threads
-// @version      0.3.0
+// @version      0.3.1
+// @description  Threads ID & Lee Su Threads
+// @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
 // @grant        none
@@ -13,7 +15,7 @@
     const STORE_NAME = 'profilecache';
     let db;
 
-    // --- 初始化資料庫 (加入版本控制) ---
+    // --- 初始化資料庫 ---
     const initDB = () => {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, 2);
@@ -38,9 +40,10 @@
         });
     };
 
-    // --- 核心邏輯：自動檢查與收割 ---
+    // --- 核心邏輯：自動檢查 ---
     async function doSmartSync() {
         if (!db) return;
+        // 擴大掃描範圍，確保包含轉發與回覆
         const articles = document.querySelectorAll('article, [data-pressable-container="true"]');
 
         for (const scope of articles) {
@@ -48,7 +51,7 @@
             if (!userLink) continue;
             const userId = userLink.getAttribute('href').split('?')[0];
 
-            // A. 從 IDB 讀取
+            // A. 從 IDB 讀取快取
             const cached = await new Promise(res => {
                 try {
                     const tx = db.transaction([STORE_NAME], 'readonly');
@@ -64,7 +67,7 @@
                 continue;
             }
 
-            // B. 沒資料，執行收割 (解析插件)
+            // B. 沒快取資料 (解析原有的 Badge 插件)
             handleCapture(scope, userId);
         }
     }
@@ -76,8 +79,8 @@
         const title = badge.title || "";
         const content = badge.innerText || "";
 
+        // 如果已經有資料（不是等待中的時鐘圖標）
         if (title.includes("加入時間") && !content.includes("⏳")) {
-            // 解析：只留純日期與純地點
             let joined = title.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim();
             let location = content.replace("⏳", "").replace("[新帳號]", "").trim();
 
@@ -88,9 +91,11 @@
             } catch (e) { console.error("[IDB 寫入錯誤]", e); }
         }
         else if (!badge.dataset.cakeClicked) {
+            // 模擬點擊觸發原始插件抓取資料
             badge.dataset.cakeClicked = "true";
             const btn = badge.querySelector('button') || badge;
             btn.click();
+            // 快速關閉彈出的視窗（如果有）
             setTimeout(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })), 10);
         }
     }
@@ -108,18 +113,21 @@
 
     function renderUI(scope, data) {
         let display = `📅${data.joined}`;
-        if (data.location) {
+       if (data.location) {
             display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
-        }
+       }
         if (checkIsNew(data.joined)) {
             display += `\n✨[新帳號]`;
         }
 
         const img = scope.querySelector('img');
         if (img) {
+
             const container = img.parentElement?.parentElement;
             if (container) {
-                container.classList.add("cake-avatar-anchor");
+                if (!container.classList.contains("cake-avatar-anchor")) {
+                    container.classList.add("cake-avatar-anchor");
+                }
                 if (container.getAttribute('data-cake-date') !== display) {
                     container.setAttribute('data-cake-date', display);
                 }
@@ -132,12 +140,40 @@
         if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
-    // --- 啟動流程 ---
+    // --- 啟動與樣式注入 ---
     initDB().then(() => {
         const style = document.createElement('style');
-        style.textContent = `.cake-avatar-anchor{position:relative!important}.cake-avatar-anchor::after{content:attr(data-cake-date)!important;white-space:pre!important;line-height:1.1!important;text-align:center!important;position:absolute!important;top:100%!important;left:50%!important;transform:translateX(-50%)!important;margin-top:4px!important;color:#999!important;font-size:9px!important;pointer-events:none!important;z-index:5!important;display:block!important}`;
+        style.textContent = `
+            /* 讓頭像容器成為定位基準 */
+            .cake-avatar-anchor {
+                position: relative !important;
+                overflow: visible !important;
+                display: flex !important;
+                justify-content: center !important;
+            }
+
+            /* 利用 ::after 渲染日期文字 */
+            .cake-avatar-anchor::after {
+                content: attr(data-cake-date) !important;
+                white-space: pre !important;      /* 支援 \\n 換行 */
+                line-height: 1.1 !important;
+                text-align: center !important;
+                position: absolute !important;
+                top: 100% !important;             /* 對齊頭像底部 */
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                margin-top: 6px !important;       /* 與頭像拉開距離 */
+                color: #A0A0A0 !important;        /* 使用與 Threads 次要資訊相近的灰色 */
+                font-size: 10px !important;
+                pointer-events: none !important;
+                z-index: 5 !important;
+                display: block !important;
+                width: max-content !important;    /* 寬度隨文字長度調整 */
+            }
+        `;
         document.head.appendChild(style);
 
+        // 持續掃描新載入的貼文
         setInterval(doSmartSync, 1500);
         doSmartSync();
     }).catch(() => console.error("腳本啟動失敗"));
