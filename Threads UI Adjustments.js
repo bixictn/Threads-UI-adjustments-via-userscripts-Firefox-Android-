@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.8.2
+// @version      0.8.3
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -37,16 +37,25 @@
     function applyIdReformat(timeEl) {
         if (timeEl.dataset.processed === "done") return;
 
-        let featureLayer = timeEl.parentElement;
+       let featureLayer = timeEl.parentElement;
+        // 1. 改用 let 宣告，並修正選擇器括號
+        let idElement = featureLayer.querySelector('a[href*="/@"]:not([href*="/post/"])');
+
         for (let i = 0; i < 8; i++) {
-            if (featureLayer && featureLayer.getAttribute('style')?.includes('--x-columnGap')) {
+            if (idElement) {
+                // 找到了就往上跳一層並結束迴圈
                 featureLayer = featureLayer.parentElement;
                 break;
+            } else {
+                featureLayer = featureLayer.parentElement;
+
+                // 2. 防錯：如果爬到最頂端沒父節點了就停止
+                if (!featureLayer) break;
+
+                // 3. 重新在新的父層尋找 ID，同樣修正選擇器括號
+                idElement = featureLayer.querySelector('a[href*="/@"]:not([href*="/post/"])');
             }
-            featureLayer = featureLayer.parentElement;
         }
-
-
        const postContainer = featureLayer;
 
             // 確保是該貼文的第一個時間標籤 (避免重複處理回覆內容)
@@ -55,7 +64,7 @@
                 timeEl.dataset.processed = "done";
                 return;
             }
-            const idElement = postContainer.querySelector('a[href*="/@"]:not(:has(img))');
+
             idElement.style.setProperty('color', '#D4AF37', 'important');
             idElement.style.setProperty('font-size', '14px' ,'important');
             idElement.style.setProperty('font-weight', 'bold' ,'important');
@@ -83,7 +92,7 @@
             }
 
             // B. 主題標籤 (Hashtag / Search Link) 改藍色加粗
-            const subjectLink = postContainer.querySelector('a[href*="/search?q="]');
+            const subjectLink = postContainer.querySelector('a[href*="/search?q="]:not([href*="timely"])');
             if (subjectLink) {
                 subjectLink.style.setProperty('color', '#0095f6', 'important');
                 subjectLink.style.setProperty('font-size', '15px', 'important');
@@ -102,32 +111,58 @@
     }
 
     // 3. 核心：僅限首篇的內文縮排 (針對 /post/ 頁面)
-    function handleFirstPostIndent() {
+    function handlePostPageIndent() {
         if (!window.location.href.includes('/post/')) return;
 
-        // 利用 CSS 特徵 (--x-columnGap) 抓取頁面上所有 ID/時間列的特徵層
-        const allHeaders = Array.from(document.querySelectorAll('div[style*="--x-columnGap"]'));
-        if (allHeaders.length === 0) return;
+        // 1. 直接鎖定目標 Pagelet 節點 (這是詳情頁的主角區塊)
+        const postPagelet = document.querySelector('[data-pagelet="threads_post_page_0"]');
+        if (!postPagelet) return;
 
-        // 物理位置上的第一個 Header 必定是主貼文
-        const firstHeader = allHeaders[0];
-        const idWrapper = firstHeader.parentElement?.parentElement;
+        // 2. 在這個 Pagelet 內抓取所有的 Header
+        const headers = Array.from(postPagelet.querySelectorAll('div[style*="--x-columnGap"]')).filter(header => {
+            return !!header.querySelector('a[href*="/@"]:not([href*="/post/"])');
+        });
 
-        if (idWrapper) {
-            // 內文通常是 ID 容器的下一個兄弟節點
-            let contentNode = idWrapper.nextElementSibling;
+        headers.forEach((header, index) => {
+            // 向上爬到足以看見左側「頭像與線條區」的容器
+            const postArea = header.parentElement?.parentElement?.parentElement;
+            if (!postArea) return;
 
-            // 跳過空節點，直到抓到真正的內容區
-            while (contentNode && contentNode.innerText.trim() === "" && contentNode.nextElementSibling) {
-                contentNode = contentNode.nextElementSibling;
+            // 3. 動態找線：物理幾何特徵偵測 (寬度、背景色、絕對定位)
+            const hasThreadLine = Array.from(postArea.querySelectorAll('div')).find(div => {
+                const style = window.getComputedStyle(div);
+                const hasBg = style.backgroundColor !== 'transparent' && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
+                const isNarrow = parseInt(style.width) <= 5;
+                const isAbsolute = style.position === 'absolute';
+                return hasBg && isNarrow && isAbsolute;
+            });
+
+            // --- 核心邏輯修正 ---
+            if (hasThreadLine) {
+                // 【有線】：Meta 原生已縮排，依照要求：跳過不縮排
+                // console.log(`Pagelet 內第 ${index} 篇有線，系統已處理，跳過`);
+            } else {
+                // 【沒線】：Meta 未縮排，依照要求：執行縮排
+                // console.log(`Pagelet 內第 ${index} 篇沒線，執行腳本縮排`);
+                applyIndent(header);
             }
+        });
+    }
 
-            if (contentNode && !contentNode.dataset.indentDone) {
-                // 執行縮排 50px 並重新計算寬度
-                contentNode.style.setProperty('margin-left', '50px', 'important');
-                contentNode.style.setProperty('width', 'calc(100% - 50px)', 'important');
-                contentNode.dataset.indentDone = "true";
-            }
+    function applyIndent(header) {
+        if (!header) return;
+        const idWrapper = header.parentElement?.parentElement;
+        let contentNode = idWrapper?.nextElementSibling;
+
+        // 尋找真正的內文節點
+        while (contentNode && contentNode.innerText.trim() === "" && contentNode.nextElementSibling) {
+            contentNode = contentNode.nextElementSibling;
+        }
+
+        if (contentNode && !contentNode.dataset.indentDone) {
+            contentNode.style.setProperty('margin-left', '50px', 'important');
+            contentNode.style.setProperty('width', 'calc(100% - 50px)', 'important');
+            contentNode.dataset.indentDone = "true";
         }
     }
 
@@ -182,7 +217,7 @@
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
 
         // 2. 處理詳細頁首篇縮排 (獨立執行，解決 SPA 切換問題)
-        handleFirstPostIndent();
+        handlePostPageIndent();
 
         // 3. 處理按鈕靠右
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
