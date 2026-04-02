@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID & Lee Su Threads
-// @version      0.3.1
+// @version      0.3.2
 // @description  Threads ID & Lee Su Threads
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -15,16 +15,29 @@
     const STORE_NAME = 'profilecache';
     let db;
 
-    // --- 初始化資料庫 ---
+    // --- 初始化資料庫 (版本 3) ---
     const initDB = () => {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 2);
+            // 升級到版本 3 以支援索引
+            const request = indexedDB.open(DB_NAME, 3);
 
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
+                let store;
+
+                // 1. 檢查資料表是否存在，不存在則建立
                 if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                    console.log("[IDB] 已建立資料表:", STORE_NAME);
+                    store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                    console.log("[IDB] 已建立新資料表:", STORE_NAME);
+                } else {
+                    // 如果已存在，則取得現有的 Store 以進行後續索引操作
+                    store = e.target.transaction.objectStore(STORE_NAME);
+                }
+
+                // 2. 建立時間索引 (createdAt)，這才是實現「最新 20 筆」排序的關鍵
+                if (!store.indexNames.contains('createdAt')) {
+                    store.createIndex('createdAt', 'createdAt', { unique: false });
+                    console.log("[IDB] 已成功建立 createdAt 索引");
                 }
             };
 
@@ -34,7 +47,7 @@
             };
 
             request.onerror = (e) => {
-                console.error("[IDB] 初始化失敗:", e.target.error);
+                console.error("[IDB] 初始化失敗 (可能是版本號衝突):", e.target.error);
                 reject();
             };
         });
@@ -86,7 +99,12 @@
 
             try {
                 const tx = db.transaction([STORE_NAME], 'readwrite');
-                tx.objectStore(STORE_NAME).put({ userId, joined, location });
+                tx.objectStore(STORE_NAME).put({
+    userId,
+    joined,
+    location,
+    createdAt: Date.now() // 加入這行：毫秒時間
+});
                 console.log(`[IDB 存入] ${userId}: ${joined} | ${location}`);
             } catch (e) { console.error("[IDB 寫入錯誤]", e); }
         }
@@ -112,7 +130,7 @@
     }
 
     function renderUI(scope, data) {
-        let display = `📅${data.joined}`;
+        let display = `📅\n${data.joined}`;
        if (data.location) {
             display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
        }
