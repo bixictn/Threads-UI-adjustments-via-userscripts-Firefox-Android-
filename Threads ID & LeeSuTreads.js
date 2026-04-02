@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name          Threads ID & Lee Su Threads (No-Flash)
+// @name          Threads ID & Lee Su Threads
 // @version       0.3.3
-// @description   優化讀取邏輯，防止原始 Badge 閃爍
+// @description   Threads ID & Lee Su Threads
 // @author        Gemini Adaptive AI
 // @match         https://www.threads.net/*
-// @match        https://www.threads.com/*
+// @match         https://www.threads.com/*
 // @grant         none
 // ==/UserScript==
 
@@ -136,7 +136,7 @@
         }
     }
 
-    // 只有沒資料時，才短暫顯示原始 Badge 讓插件運作
+    // 只有沒資料時，才短暫顯示原始 Badge 讓套件運作
     function showBadgeForCapture(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
         if (badge) {
@@ -144,7 +144,7 @@
         }
     }
 
-    // --- 啟動與樣式注入 ---
+    // --- 啟動與樣式 ---
     initDB().then(() => {
         const style = document.createElement('style');
         style.textContent = `
