@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name          Threads ID & Lee Su Threads
-// @version       0.3.3
-// @description   Threads ID & Lee Su Threads
+// @name          Threads ID & Lee-Su-Threads
+// @version       0.3.4
+// @description   Threads ID & Lee-Su-Threads
 // @author        Gemini Adaptive AI
 // @match         https://www.threads.net/*
-// @match         https://www.threads.com/*
+// @match        https://www.threads.com/*
 // @grant         none
 // ==/UserScript==
 
@@ -15,10 +15,10 @@
     const STORE_NAME = 'profilecache';
     let db;
 
-    // --- 初始化資料庫 (版本 3) ---
+    // --- 初始化資料庫 ---
     const initDB = () => {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 3);
+            const request = indexedDB.open(DB_NAME,3);
 
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
@@ -28,8 +28,8 @@
                 } else {
                     store = e.target.transaction.objectStore(STORE_NAME);
                 }
-                if (!store.indexNames.contains('createdAt')) {
-                    store.createIndex('createdAt', 'createdAt', { unique: false });
+                if (!store.indexNames.contains('timestamp')) {
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
                 }
             };
 
@@ -51,6 +51,20 @@
         const articles = document.querySelectorAll('article, [data-pressable-container="true"]');
 
         for (const scope of articles) {
+
+            const img = scope.querySelector('img');
+            if(img.dataset.processed=="done")continue;
+
+            if (img) {
+            const container = img.parentElement?.parentElement;
+                if (container) {
+                    container.classList.add("cake-avatar-anchor");
+                    if (container.getAttribute('data-cake-date') !== "⏳") {
+                        container.setAttribute('data-cake-date', "⏳");
+                    }
+                }
+            }
+
             const userLink = scope.querySelector('a[href*="/@"]');
             if (!userLink) continue;
             const userId = userLink.getAttribute('href').split('?')[0];
@@ -95,7 +109,7 @@
                     userId,
                     joined,
                     location,
-                    createdAt: Date.now()
+                    timestamp: Date.now()
                 });
                 // 成功後立即隱藏
                 hideBadge(scope, true);
@@ -125,6 +139,7 @@
                 }
             }
         }
+        img.dataset.processed = "done";
     }
 
     // 強制隱藏原始 Badge
@@ -136,7 +151,7 @@
         }
     }
 
-    // 只有沒資料時，才短暫顯示原始 Badge 讓套件運作
+    // 只有沒資料時，才短暫顯示原始 Badge 讓插件運作
     function showBadgeForCapture(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
         if (badge) {
@@ -144,7 +159,7 @@
         }
     }
 
-    // --- 啟動與樣式 ---
+    // --- 啟動與樣式注入 ---
     initDB().then(() => {
         const style = document.createElement('style');
         style.textContent = `
