@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.6
+// @version      0.2.6.1
 // @description  Lee-su-Threads save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -103,7 +103,7 @@
             });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-            a.download = `Lee-su-Threads-Backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.download = `Modify-Lee-su-Threads-Backup-${new Date().toISOString().slice(0,10)}.json`;
             a.click();
         };
 
