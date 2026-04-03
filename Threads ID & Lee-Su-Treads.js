@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.3.4
+// @version       0.3.5
 // @description   Threads ID & Lee-Su-Threads
 // @author        Gemini Adaptive AI
 // @match         https://www.threads.net/*
@@ -67,7 +67,9 @@
 
             const userLink = scope.querySelector('a[href*="/@"]');
             if (!userLink) continue;
-            const userId = userLink.getAttribute('href').split('?')[0];
+
+            const rawHref = userLink.getAttribute('href').split('?')[0]; // 先去掉網址參數
+            const userId = rawHref.replace('/@', '').replace('@', '').replace('/', '');
 
             // A. 從 IDB 讀取快取
             const cached = await new Promise(res => {
@@ -151,7 +153,7 @@
         }
     }
 
-    // 只有沒資料時，才短暫顯示原始 Badge 讓插件運作
+    // 只有沒資料時，才短暫顯示原始 Badge 讓套件運作
     function showBadgeForCapture(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
         if (badge) {
