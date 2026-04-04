@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.8.3
+// @version      0.9.0
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -18,13 +18,45 @@
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
 
-        /* 導覽列圖示縮小 */
-        nav svg { transform: scale(0.5) !important; transform-origin: center center !important; }
+        /* --- 需求 1: Logo 樣式 --- */
+        a[href="/"] svg[aria-label="Threads"],
+        div[role="navigation"] svg[aria-label="Threads"],
+        a[aria-label="首頁"] svg[aria-label="Threads"] {
+            top: 13px !important;
+            border: 2px solid #D4AF37 !important;
+            border-radius: 50% !important;
+            padding: 4px !important;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.6) !important;
+            cursor: pointer !important;
+            transition: transform 0.2s ease !important;
+        }
+        a[href="/"] svg[aria-label="Threads"]:active {
+            transform: scale(0.9) !important;
+        }
 
-        /* 內文放大 */
+        /* --- 需求 2: 導覽列 Active 狀態 (金色) --- */
+        /* 當 a 標籤被加上 data-active="true" 時，內部的 SVG 變色 */
+        a[data-active="true"] svg,
+        div[role="button"][data-active="true"] svg {
+            color: #D4AF37 !important;
+            fill: #D4AF37 !important;
+        }
+
+        /* 針對特定 SVG 屬性控制 */
+        a[data-active="true"] svg path,
+        div[role="button"][data-active="true"] svg path {
+            fill: #D4AF37 !important;
+            stroke: #D4AF37 !important;
+        }
+
+        /* 原有導覽列圖示縮小 (排除主 Logo) */
+        nav svg:not([aria-label="Threads"]) {
+            transform: scale(0.7) !important;
+            transform-origin: center center !important;
+        }
+
+        /* 內文與佈局樣式 */
         div span > span { font-size: 18px !important; }
-
-        /* 按鈕列靠右容器樣式 */
         .custom-stack-move {
             display: flex !important;
             justify-content: flex-end !important;
@@ -32,6 +64,29 @@
         }
     `;
     document.head.appendChild(style);
+
+    // 處理導覽列 Active 狀態邏輯
+    function updateNavActiveState() {
+        const currentPath = window.location.pathname;
+
+        // 尋找所有導覽連結
+        const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
+
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+
+            // 判斷是否為當前頁面 (精確匹配或首頁特殊處理)
+            const isActive = (href === currentPath) ||
+                             (currentPath === '/' && href === '/') ||
+                             (href && href !== '/' && currentPath.startsWith(href));
+
+            if (isActive) {
+                link.setAttribute('data-active', 'true');
+            } else {
+                link.removeAttribute('data-active');
+            }
+        });
+    }
 
     // 2. 核心：ID、時間、主題標籤格式化
     function applyIdReformat(timeEl) {
@@ -211,25 +266,20 @@
         });
     }
 
-    // 主執行迴圈：整合所有處理邏輯
+    // 主執行迴圈
     function mainLoop() {
-        // 1. 處理 ID 與時間格式
+        updateNavActiveState(); // 更新導覽列金色狀態
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-
-        // 2. 處理詳細頁首篇縮排 (獨立執行，解決 SPA 切換問題)
-        handlePostPageIndent();
-
-        // 3. 處理按鈕靠右
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
 
-        // 4. 清理特殊字元
+        // 清理特殊字元
         cleanContent();
     }
 
     // 初始啟動
     mainLoop();
 
-    // 監控網頁 DOM 變化，自動處理動態載入的內容
+    // 監控網頁變化 (SPA 換頁時網址會變，所以需要持續監控)
     const observer = new MutationObserver(() => mainLoop());
     observer.observe(document.body, { childList: true, subtree: true });
 
