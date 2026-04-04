@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1
+// @version      0.9.1.1
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -129,10 +129,16 @@
 
         // 主題標籤變藍
         const subjectLink = postContainer.querySelector('a[href*="/search?q="]:not([href*="timely"])');
-        if (subjectLink) {
-            subjectLink.style.setProperty('color', '#0095f6', 'important');
-            subjectLink.style.setProperty('font-weight', 'bold', 'important');
-        }
+        subjectLink.style.setProperty('color', '#0095f6', 'important');
+                subjectLink.style.setProperty('font-size', '15px', 'important');
+                subjectLink.style.setProperty('font-weight', 'bold', 'important');
+                subjectLink.style.setProperty('text-decoration', 'none', 'important');
+
+                if (!subjectLink.dataset.formatted) {
+                    const tagText = subjectLink.innerText.trim().replace(/[<>]/g, '');
+                    subjectLink.innerText = `${tagText}`;
+                    subjectLink.dataset.formatted = "true";
+                }
         timeEl.dataset.processed = "done";
     }
 
