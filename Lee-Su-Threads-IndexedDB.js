@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.6.1
+// @version      0.2.7.1
 // @description  Lee-su-Threads save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -69,13 +69,49 @@
         const stats = await getStats();
         window.history.pushState({ idbPanelOpen: true }, "");
 
+        // --- 核心修正：鎖定背景滑動 ---
+        document.body.style.overflow = 'hidden';
+
+        // 計算 Logo X 座標對齊位置
+        const logo = document.querySelector('a[href="/"] svg[aria-label="Threads"]') || document.querySelector('div[role="navigation"] svg');
+        let targetLeft = "50%";
+        if (logo) {
+            const rect = logo.getBoundingClientRect();
+            targetLeft = `${rect.left + (rect.width / 2)}px`;
+        }
+
         panel = document.createElement('div');
         panel.id = 'threads-idb-data-panel';
-        panel.style.cssText = `position:fixed!important;top:50%!important;left:50%!important;transform:translate(-50%,-50%)!important;width:80%!important;max-width:350px!important;background:#101010!important;border:2px solid #D4AF37!important;border-radius:16px!important;padding:20px!important;z-index:2147483646!important;color:white!important;box-shadow:0 0 30px rgba(0,0,0,0.8);`;
+
+        // Y座標: top: 30px (按鈕中心線高度 14 + 32/2)
+        panel.style.cssText = `
+            position: fixed !important;
+            top: 30px !important;
+            left: ${targetLeft} !important;
+            transform: translateX(-50%) !important;
+            transform-origin: top center !important;
+            width: 85% !important;
+            max-width: 350px !important;
+            background: #101010 !important;
+            border: 2px solid #D4AF37 !important;
+            border-radius: 16px !important;
+            padding: 20px !important;
+            z-index: 2147483646 !important;
+            color: white !important;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.9);
+            animation: panelFadeIn 0.2s ease-out;
+        `;
+
+        if (!document.getElementById('panel-anim')) {
+            const s = document.createElement('style');
+            s.id = 'panel-anim';
+            s.textContent = `@keyframes panelFadeIn { from { opacity:0; transform: translateX(-50%) scale(0.95); } to { opacity:1; transform: translateX(-50%) scale(1); } }`;
+            document.head.appendChild(s);
+        }
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #333;padding-bottom:10px;">
-                <span style="color:#D4AF37;font-weight:bold;">📂 資料中心 v0.2.6</span>
+                <span style="color:#D4AF37;font-weight:bold;">📂 資料中心 v0.2.7</span>
                 <span id="close-panel-x" style="color:#444;font-size:16px;cursor:pointer;">✕</span>
             </div>
             <div style="text-align:center;background:#1a1a1a;padding:10px;border-radius:10px;margin-bottom:15px;">
@@ -95,7 +131,7 @@
         document.body.appendChild(panel);
         updatePanelUI(stats);
 
-        // 綁定按鈕事件
+        // 綁定事件
         document.getElementById('btn-export').onclick = async () => {
             const db = await getDB();
             const data = await new Promise(res => {
@@ -103,22 +139,12 @@
             });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-            a.download = `Modify-Lee-su-Threads-Backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.download = `Lee-su-Threads-Backup-${new Date().toISOString().slice(0,10)}.json`;
             a.click();
         };
 
         document.getElementById('btn-import-std').onclick = () => { importMode = 'normal'; document.getElementById('hidden-file-input').click(); };
         document.getElementById('btn-import-addon').onclick = () => { importMode = 'addon'; document.getElementById('hidden-file-input').click(); };
-
-        document.getElementById('btn-clear-all').onclick = async () => {
-            if (confirm("確定要刪除所有資料嗎？")) {
-                const db = await getDB();
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                tx.objectStore(STORE_NAME).clear();
-                tx.oncomplete = () => { updatePanelUI({ count: 0, latest: [] }); alert("已清空"); };
-            }
-        };
-
         document.getElementById('close-panel-x').onclick = () => closePanel();
 
         document.getElementById('hidden-file-input').onchange = e => {
@@ -131,31 +157,26 @@
                     const db = await getDB();
                     const tx = db.transaction(STORE_NAME, 'readwrite');
                     const store = tx.objectStore(STORE_NAME);
-
                     let newItems = 0, updatedItems = 0;
                     const existingKeys = new Set(await new Promise(res => {
                         store.getAllKeys().onsuccess = (e) => res(e.target.result);
                     }));
-
-                    const now = Date.now();
                     if (importMode === 'addon') {
                         Object.entries(json).forEach(([uid, val], index) => {
                             existingKeys.has(uid) ? updatedItems++ : newItems++;
                             let loc = val.location;
                             if (locFix[loc]) loc = locFix[loc];
-                            store.put({ userId: uid, joined: val.joined, location: loc, timestamp: val.timestamp || (now + index) });
+                            store.put({ userId: uid, joined: val.joined, location: loc, timestamp: val.timestamp || (Date.now() + index) });
                         });
                     } else {
-                        // 標準匯入邏輯修正
                         json.forEach(item => {
                             existingKeys.has(item.userId) ? updatedItems++ : newItems++;
                             store.put(item);
                         });
                     }
-
                     tx.oncomplete = async () => {
                         const s = await getStats(); updatePanelUI(s);
-                        alert(`📊 匯入報告\n模式：${importMode === 'addon' ? '套件資料' : '標準備份'}\n新增：${newItems}\n更新：${updatedItems}`);
+                        alert(`📊 匯入報告\n新增：${newItems}\n更新：${updatedItems}`);
                     };
                 } catch (err) { alert("格式錯誤"); }
             };
@@ -164,28 +185,48 @@
     };
 
     const patrolBtn = () => {
-        if (window.location.href.includes('/media')) {
+        const url = window.location.href;
+
+        const spans = Array.from(document.querySelectorAll('span'));
+        const hasNewPostText = spans.some(s => s.innerText === "新串文");
+        const hasDraftIcon = !!document.querySelector('svg[aria-label="草稿"]');
+        const hasCancelBtn = spans.some(s => s.innerText === "取消");
+
+        const isCreatingPost = (hasNewPostText && (hasDraftIcon || hasCancelBtn));
+
+        const shouldHide = url.includes('/media') || url.includes('/intent/post') || isCreatingPost;
+
+        if (shouldHide) {
             if (panel) closePanel(true);
             const b = document.getElementById('threads-idb-mini-btn');
             if (b) b.style.display = 'none';
             return;
         }
+
         let btn = document.getElementById('threads-idb-mini-btn');
         if (!btn) {
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
             btn.innerHTML = '📊';
-            btn.style.cssText = `position:fixed!important;top:13px!important;left:70px!important;width:30px!important;height:30px!important;background-color:rgba(16,16,16,0.9)!important;color:#D4AF37!important;border:1.5px solid #D4AF37!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:2147483647!important;box-shadow:0 4px 10px rgba(0,0,0,0.5)!important;backdrop-filter:blur(4px);`;
+            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;background-color:rgba(16,16,16,0.9)!important;color:#D4AF37!important;border:1.5px solid #D4AF37!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:2147483647!important;box-shadow:0 4px 10px rgba(0,0,0,0.5)!important;backdrop-filter:blur(4px);`;
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
-        } else { btn.style.display = 'flex'; }
+        } else {
+            btn.style.display = 'flex';
+        }
     };
 
     const closePanel = (isPop = false) => {
-        if (panel) { panel.remove(); panel = null; if (!isPop) window.history.back(); }
+        if (panel) {
+            panel.remove();
+            panel = null;
+            // --- 核心修正：還原背景滑動 ---
+            document.body.style.overflow = '';
+            if (!isPop) window.history.back();
+        }
     };
 
     window.onpopstate = () => closePanel(true);
-    setInterval(patrolBtn, 1500);
+    setInterval(patrolBtn, 1000);
     patrolBtn();
 })();
