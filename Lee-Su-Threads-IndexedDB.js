@@ -111,9 +111,6 @@
             background: #D4AF37 !important;
             color: #fff !important;
         }
-        a[href="/"] svg[aria-label="Threads"] path {
-            fill: #D4AF37 !important;
-        }
 }
     `;
     document.head.appendChild(style);
