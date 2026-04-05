@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.7.1
-// @description  Lee-su-Threads save to IndexedDB
+// @version      0.2.7.2
+// @description  Lee-su-Threads save to IndexedDB: Advanced Scroll Lock for Android Firefox
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -44,6 +44,22 @@
         });
     };
 
+    // --- 滾動鎖定加強版 ---
+    const lockScroll = () => {
+        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+        document.body.style.paddingRight = `${scrollBarWidth}px`;
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden'; // Firefox 關鍵
+        document.body.style.touchAction = 'none'; // 阻斷觸控滑動
+    };
+
+    const unlockScroll = () => {
+        document.body.style.paddingRight = '';
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        document.body.style.touchAction = '';
+    };
+
     const updatePanelUI = (stats) => {
         if (!panel) return;
         const countEl = panel.querySelector('.db-count');
@@ -69,10 +85,9 @@
         const stats = await getStats();
         window.history.pushState({ idbPanelOpen: true }, "");
 
-        // --- 核心修正：鎖定背景滑動 ---
-        document.body.style.overflow = 'hidden';
+        // 執行加強版鎖定
+        lockScroll();
 
-        // 計算 Logo X 座標對齊位置
         const logo = document.querySelector('a[href="/"] svg[aria-label="Threads"]') || document.querySelector('div[role="navigation"] svg');
         let targetLeft = "50%";
         if (logo) {
@@ -82,15 +97,13 @@
 
         panel = document.createElement('div');
         panel.id = 'threads-idb-data-panel';
-
-        // Y座標: top: 30px (按鈕中心線高度 14 + 32/2)
         panel.style.cssText = `
             position: fixed !important;
             top: 30px !important;
             left: ${targetLeft} !important;
             transform: translateX(-50%) !important;
             transform-origin: top center !important;
-            width: 85% !important;
+            width: 80% !important;
             max-width: 350px !important;
             background: #101010 !important;
             border: 2px solid #D4AF37 !important;
@@ -100,6 +113,7 @@
             color: white !important;
             box-shadow: 0 15px 50px rgba(0,0,0,0.9);
             animation: panelFadeIn 0.2s ease-out;
+            touch-action: auto; /* 讓 Panel 內部可以滑動列表 */
         `;
 
         if (!document.getElementById('panel-anim')) {
@@ -111,7 +125,7 @@
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #333;padding-bottom:10px;">
-                <span style="color:#D4AF37;font-weight:bold;">📂 資料中心 v0.2.7</span>
+                <span style="color:#D4AF37;font-weight:bold;">📂 資料中心 v0.2.7.2</span>
                 <span id="close-panel-x" style="color:#444;font-size:16px;cursor:pointer;">✕</span>
             </div>
             <div style="text-align:center;background:#1a1a1a;padding:10px;border-radius:10px;margin-bottom:15px;">
@@ -131,7 +145,12 @@
         document.body.appendChild(panel);
         updatePanelUI(stats);
 
-        // 綁定事件
+        // 停止 Panel 上的滑動事件穿透到 Body (Firefox 必備)
+        panel.addEventListener('touchmove', (e) => {
+            const isScrollable = e.target.closest('#idb-list-content');
+            if (!isScrollable) e.preventDefault();
+        }, { passive: false });
+
         document.getElementById('btn-export').onclick = async () => {
             const db = await getDB();
             const data = await new Promise(res => {
@@ -186,14 +205,11 @@
 
     const patrolBtn = () => {
         const url = window.location.href;
-
         const spans = Array.from(document.querySelectorAll('span'));
         const hasNewPostText = spans.some(s => s.innerText === "新串文");
         const hasDraftIcon = !!document.querySelector('svg[aria-label="草稿"]');
         const hasCancelBtn = spans.some(s => s.innerText === "取消");
-
         const isCreatingPost = (hasNewPostText && (hasDraftIcon || hasCancelBtn));
-
         const shouldHide = url.includes('/media') || url.includes('/intent/post') || isCreatingPost;
 
         if (shouldHide) {
@@ -220,8 +236,8 @@
         if (panel) {
             panel.remove();
             panel = null;
-            // --- 核心修正：還原背景滑動 ---
-            document.body.style.overflow = '';
+            // 執行還原背景
+            unlockScroll();
             if (!isPop) window.history.back();
         }
     };
