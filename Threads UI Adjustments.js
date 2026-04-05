@@ -142,7 +142,7 @@
         timeEl.dataset.processed = "done";
     }
 
-    // 4. 找回的功能：僅限首篇的內文縮排 (針對 /post/ 頁面)
+    // 4. 僅限首篇的內文縮排 (針對 /post/ 頁面)
     function handlePostPageIndent() {
         if (!window.location.href.includes('/post/')) return;
         const postPagelet = document.querySelector('[data-pagelet="threads_post_page_0"]');
