@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1.1
+// @version      0.9.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -18,11 +18,12 @@
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
 
-        /* --- Logo 樣式 (需求 1) --- */
-        a[href="/"] svg[aria-label="Threads"],
-        div[role="navigation"] svg[aria-label="Threads"],
-        a[aria-label="首頁"] svg[aria-label="Threads"] {
-            top: 13px !important;
+        /* 深色模式 & 亮色模式通用：針對 Threads Logo SVG 進行處理 */
+        .__fb-dark-mode a[href="/"] svg[aria-label="Threads"],
+        .__fb-light-mode a[href="/"] svg[aria-label="Threads"],
+        a[href="/"] div svg[aria-label="Threads"],
+        div[role="navigation"] a[href="/"] svg[aria-label="Threads"] {
+           top: 13px !important;
             border: 2px solid #D4AF37 !important;
             border-radius: 50% !important;
             padding: 4px !important;
@@ -30,10 +31,20 @@
             cursor: pointer !important;
             transition: transform 0.2s ease !important;
         }
-        a[href="/"] svg[aria-label="Threads"]:active {
+
+        a[href="/"] svg[aria-label="Threads"] path {
+            fill: #D4AF37 !important;
+        }
+
+        /* 點擊時的縮放效果 */
+        a[href="/"]:active svg[aria-label="Threads"] {
             transform: scale(0.9) !important;
         }
 
+        /* 針對亮色模式的陰影微調 (選用：讓金色在白底更明顯) */
+        .__fb-light-mode a[href="/"] svg[aria-label="Threads"] {
+            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
+        }
         /* --- 導覽列 Active 狀態 (需求 2) --- */
         a[data-active="true"] svg,
         div[role="button"][data-active="true"] svg {
@@ -129,20 +140,22 @@
 
         // 主題標籤變藍
         const subjectLink = postContainer.querySelector('a[href*="/search?q="]:not([href*="timely"])');
-        subjectLink.style.setProperty('color', '#0095f6', 'important');
-                subjectLink.style.setProperty('font-size', '15px', 'important');
-                subjectLink.style.setProperty('font-weight', 'bold', 'important');
-                subjectLink.style.setProperty('text-decoration', 'none', 'important');
+        if (subjectLink) {
+            subjectLink.style.setProperty('color', '#0095f6', 'important');
+            subjectLink.style.setProperty('font-size', '15px', 'important');
+            subjectLink.style.setProperty('font-weight', 'bold', 'important');
+            subjectLink.style.setProperty('text-decoration', 'none', 'important');
 
-                if (!subjectLink.dataset.formatted) {
-                    const tagText = subjectLink.innerText.trim().replace(/[<>]/g, '');
-                    subjectLink.innerText = `${tagText}`;
-                    subjectLink.dataset.formatted = "true";
-                }
+            if (!subjectLink.dataset.formatted) {
+                const tagText = subjectLink.innerText.trim().replace(/[<>]/g, '');
+                subjectLink.innerText = `${tagText}`;
+                subjectLink.dataset.formatted = "true";
+            }
+        }
         timeEl.dataset.processed = "done";
     }
 
-    // 4. 僅限首篇的內文縮排 (針對 /post/ 頁面)
+    // 4. 找回的功能：僅限首篇的內文縮排 (針對 /post/ 頁面)
     function handlePostPageIndent() {
         if (!window.location.href.includes('/post/')) return;
         const postPagelet = document.querySelector('[data-pagelet="threads_post_page_0"]');
