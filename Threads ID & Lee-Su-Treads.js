@@ -99,7 +99,6 @@
 
             // 讀取快取
             const cached = await new Promise(res => {
-                container.setAttribute('data-cake-date', "讀取中...");
                 const tx = db.transaction([STORE_NAME], 'readonly');
                 const req = tx.objectStore(STORE_NAME).get(userId);
                 req.onsuccess = () => res(req.result);
@@ -125,6 +124,14 @@
                 showBadgeForCapture(scope);
                 handleCapture(scope, userId,container);
             }
+
+            if (container.getAttribute('data-cake-date') === "⏳") {
+                const lastClick = badge.dataset.lastClickTime || 0;
+                if (Date.now() - lastClick > 10000) { // 10秒沒反應就重置
+                delete badge.dataset.cakeClicked;
+                delete badge.dataset.cakeStatus;
+            }
+}
         }
     }
 
