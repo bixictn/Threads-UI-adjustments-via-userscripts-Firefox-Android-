@@ -245,7 +245,7 @@
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid rgba(128,128,128,0.2);padding-bottom:10px;">
-                <span style="font-weight:bold;">📂 資料中心 v0.2.7.3</span>
+                <span style="font-weight:bold;">📂 資料中心 v0.2.7</span>
                 <span id="close-panel-x" style="font-size:16px;cursor:pointer;opacity:0.5;">✕</span>
             </div>
             <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
