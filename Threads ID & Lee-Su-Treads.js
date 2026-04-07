@@ -1,8 +1,7 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.3.8
+// @version       0.4.5
 // @description   Threads ID & Lee-Su-Threads
-// @author        Gemini Adaptive AI
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
@@ -14,10 +13,10 @@
 
     const DB_NAME = 'ThreadsProfileDB';
     const STORE_NAME = 'profilecache';
-    const ONE_WEEK = 7 * 24 * 60 * 60 * 1000; // 七天的毫秒數
+    const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
     let db;
 
-    // --- 1. Fetch 攔截救援 (解決 JSON 截斷與背景更新) ---
+    // --- 1. Fetch 攔截器 ---
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
         const response = await originalFetch(...args);
@@ -26,7 +25,6 @@
             clone.text().then(async (rawText) => {
                 const countryMatch = rawText.match(/"about_this_profile_country".*?"initial"\s*:\s*"([^"]+)"/);
                 const dateMatch = rawText.match(/"about_this_profile_joined_date".*?"initial"\s*:\s*"([^"]+)"/);
-
                 if (countryMatch || dateMatch) {
                     const userId = window.location.href.split('/@')[1]?.split('/')[0]?.split('?')[0];
                     if (userId && db) {
@@ -34,12 +32,13 @@
                         const data = {
                             userId: userId.trim(),
                             joined: decode(dateMatch ? dateMatch[1] : "未知日期"),
-                            location: decode(countryMatch ? countryMatch[1] : "未知地點"),
+                            location: decode(countryMatch ? countryMatch[1] : "沒有地點資料"),
                             timestamp: Date.now()
                         };
                         const tx = db.transaction([STORE_NAME], 'readwrite');
                         tx.objectStore(STORE_NAME).put(data);
-                        console.log(`[🚀 攔截成功] 存入快取: ${userId}`);
+                        console.log(`[🚀 攔截成功] ${userId}`);
+                        doSmartSync();
                     }
                 }
             });
@@ -47,64 +46,44 @@
         return response;
     };
 
-    // --- 2. 初始化資料庫 ---
+    // --- 2. 工具函式 ---
     const initDB = () => {
         return new Promise((resolve) => {
             const request = indexedDB.open(DB_NAME, 3);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                let store = db.objectStoreNames.contains(STORE_NAME) ?
-                    e.target.transaction.objectStore(STORE_NAME) :
-                    db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                if (!store.indexNames.contains('timestamp')) {
-                    store.createIndex('timestamp', 'timestamp', { unique: false });
-                }
+                if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
             };
             request.onsuccess = (e) => { db = e.target.result; resolve(); };
         });
     };
 
-    // 新增：判斷元素是否在視窗內
     function isInViewport(el) {
         const rect = el.getBoundingClientRect();
-        const vHeight = (window.innerHeight || document.documentElement.clientHeight);
-
-        return (
-            rect.top <= vHeight + 200 && // 頂部還沒超過螢幕底部（下方預載）
-            rect.bottom >= -200         // 底部還沒超過螢幕頂部（上方緩衝）
-        );
+        const vHeight = window.innerHeight || document.documentElement.clientHeight;
+        return (rect.top <= vHeight + 200 && rect.bottom >= -200);
     }
 
-    // --- 3. 核心同步邏輯 ---
+    // --- 3. 核心邏輯 ---
     async function doSmartSync() {
         if (!db) return;
         const articles = document.querySelectorAll('article, [data-pressable-container="true"]');
-
-        let clickDelay = 0; // 用來累加延遲時間
 
         for (const scope of articles) {
             const img = scope.querySelector('img');
             if (!img || img.dataset.processed === "done") continue;
 
-            const container = img.parentElement?.parentElement;
-            if (container && !container.getAttribute('data-cake-date')) {
-                container.classList.add("cake-avatar-anchor");
-            }
-
             const userLink = scope.querySelector('a[href*="/@"]');
             if (!userLink) continue;
 
-            const rawHref = userLink.getAttribute('href').split('?')[0];
-            const userId = rawHref.split('/@')[1].replace(/\/$/, '');
+            const userId = userLink.getAttribute('href').split('?')[0].split('/@')[1].replace(/\/$/, '');
 
-            // 讀取快取
             const cached = await new Promise(res => {
                 const tx = db.transaction([STORE_NAME], 'readonly');
                 const req = tx.objectStore(STORE_NAME).get(userId);
                 req.onsuccess = () => res(req.result);
                 req.onerror = () => res(null);
             });
-
 
             const now = Date.now();
             const isFresh = cached && (now - cached.timestamp < ONE_WEEK);
@@ -115,116 +94,136 @@
                 continue;
             }
 
-            // 過期時先顯示舊資料墊檔
-            if (cached && !isFresh) {
-                renderUI(scope, cached, true);
+            if (cached && !isFresh) renderUI(scope, cached, true);
+
+            // 狀態判定與 5 秒超時重試
+            const badge = scope.querySelector('[class*="threads-"][title]');
+            const container = img.parentElement?.parentElement;
+            if (container && container.getAttribute('data-cake-date') === "⏳" && badge) {
+                const lastClick = parseInt(badge.dataset.lastClickTime || 0);
+                if (now - lastClick > 5000) {
+                    delete badge.dataset.cakeClicked;
+                    delete badge.dataset.cakeStatus;
+                    console.log(`[🔄 重試] ${userId} 可能遇到 ID null，現在重新嘗試點擊...`);
+                }
             }
 
             if (isInViewport(scope)) {
-                showBadgeForCapture(scope);
-                handleCapture(scope, userId,container);
+                handleCapture(scope, userId);
             }
-
-            if (container.getAttribute('data-cake-date') === "⏳") {
-                const lastClick = badge.dataset.lastClickTime || 0;
-                if (Date.now() - lastClick > 10000) { // 10秒沒反應就重置
-                delete badge.dataset.cakeClicked;
-                delete badge.dataset.cakeStatus;
-            }
-}
         }
     }
 
-    function handleCapture(scope, userId,container) {
+    function handleCapture(scope, userId) {
         const badge = scope.querySelector('[class*="threads-"][title]');
-        if (!badge) return;
+        const img = scope.querySelector('img');
+        const container = img?.parentElement?.parentElement;
+        if (!badge || !container || badge.dataset.cakeStatus === "loading") return;
 
-        if (badge.dataset.cakeStatus === "loading") return;
+        container.classList.add("cake-avatar-anchor");
         container.setAttribute('data-cake-date', "⏳");
 
         const title = badge.title || "";
         const content = badge.innerText || "";
 
-        // A. 偵測到原套件已解析完成
         if (title.includes("加入時間") && !content.includes("⏳")) {
-            let joined = title.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim();
-            let location = content.replace("⏳", "").replace("[新帳號]", "").trim();
-
-            const tx = db.transaction([STORE_NAME], 'readwrite');
-            tx.objectStore(STORE_NAME).put({
-                userId, joined, location, timestamp: Date.now()
-            });
+            const data = {
+                userId,
+                joined: title.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim(),
+                location: content.replace("⏳", "").replace("[新帳號]", "").trim(),
+                timestamp: Date.now()
+            };
+            db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).put(data);
+            renderUI(scope, data);
             hideBadge(scope);
-            badge.dataset.cakeStatus = "done";
-        }
-        // B. 尚未解析，觸發點擊 (為了誘發 Fetch)
-        else if (!badge.dataset.cakeClicked) {
-            badge.dataset.cakeStatus = "loading"; // 上鎖
+        } else if (!badge.dataset.cakeClicked) {
+            badge.dataset.cakeStatus = "loading";
             badge.dataset.cakeClicked = "true";
-
+            badge.dataset.lastClickTime = Date.now(); // 記錄點擊時間戳
             const btn = badge.querySelector('button') || badge;
-            btn.click();
 
-            // 快速關閉彈窗並在 3 秒後解除鎖定（防止網路卡死）
+            // 💡 延遲 200ms 點擊，避開 UI 執行緒高峰
             setTimeout(() => {
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
-                setTimeout(() => { if(badge) delete badge.dataset.cakeStatus; }, 3000);
-            }, 100);
+                btn.click();
+                setTimeout(() => {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+                    setTimeout(() => { if(badge) delete badge.dataset.cakeStatus; }, 3000);
+                }, 200);
+            }, 200);
         }
     }
 
+
+function getTimestampFromMonth(dateStr) {
+    if (!dateStr || dateStr.includes("未知")) return 0;
+
+    // 把 "2024年10月" 轉換成 "2024/10/01" 讓瀏覽器看得懂
+    const cleanStr = dateStr.replace('年', '/').replace('月', '/01');
+    const parsedDate = new Date(cleanStr);
+
+    return parsedDate.getTime(); // 回傳毫秒數
+}
+
     function renderUI(scope, data, isStale = false) {
         const img = scope.querySelector('img');
-        if (!img) return;
+        const container = img?.parentElement?.parentElement;
+        if (!container) return;
 
         let display = `📅\n${data.joined}`;
-        if (data.location) {
-             display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
-        }
+        if (data.location) display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
 
-        const container = img.parentElement?.parentElement;
-        if (container) {
-            container.setAttribute('data-cake-date', display);
-        }
+        const now = Date.now();
+        const joinedTs = getTimestampFromMonth(data.joined);
+    const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
 
-        if (!isStale) {
-            img.dataset.processed = "done";
-        }
+    // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
+    if (joinedTs > 0 && (now - joinedTs) < TWO_MONTHS) {
+        display += "\n✨[新帳號]";
+    }
+        container.classList.add("cake-avatar-anchor");
+        container.setAttribute('data-cake-date', display);
+        if (!isStale) img.dataset.processed = "done";
     }
 
     function hideBadge(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
-        if (badge) {
-            badge.style.setProperty('display', 'none', 'important');
-            badge.classList.remove('force-show-badge');
-        }
+        if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
     function showBadgeForCapture(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
-        if (badge) {
-            badge.classList.add('force-show-badge');
-        }
+        if (badge) badge.classList.add('force-show-badge');
     }
 
-    // --- 啟動 ---
+    // --- 4. 啟動與 CSS ---
     initDB().then(() => {
         const style = document.createElement('style');
         style.textContent = `
+            @keyframes hourglass-flip {
+                0% { transform: translateX(-50%) rotate(0deg); }
+                85% { transform: translateX(-50%) rotate(0deg); }
+                100% { transform: translateX(-50%) rotate(180deg); }
+            }
             [class*="threads-"][title] { display: none !important; }
-            .force-show-badge { display: inline-flex !important; opacity: 0.05; } /* 降低透明度減少視覺干擾 */
+            .force-show-badge { display: inline-flex !important; opacity: 0.01 !important; }
             .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
             .cake-avatar-anchor::after {
-                content: attr(data-cake-date) !important;
-                white-space: pre !important; line-height: 1.1 !important; text-align: center !important;
-                position: absolute !important; top: 100% !important; left: 50% !important;
-                transform: translateX(-50%) !important; margin-top: 6px !important;
-                color: #A0A0A0 !important; font-size: 10px !important; z-index: 5 !important;
-                width: max-content !important; pointer-events: none !important;
+                content: attr(data-cake-date);
+                position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+                margin-top: 6px; color: #A0A0A0; font-size: 10px;white-space: pre;line-height: 1.0 !important;
+                text-align: center; z-index: 10; pointer-events: none; width: max-content;
+                display: block !important;
+            }
+            .cake-avatar-anchor[data-cake-date="⏳"]::after {
+                animation: hourglass-flip 1s linear infinite !important;
             }
         `;
         document.head.appendChild(style);
-        setInterval(doSmartSync, 1500);
-        doSmartSync();
+
+        // 💡 延遲 2.5 秒啟動，徹底避開開場 ID null 的混亂期
+        setTimeout(() => {
+            setInterval(doSmartSync, 1000); // 1秒一次，穩定掃描
+            doSmartSync();
+        }, 2500);
     });
 })();
