@@ -1,35 +1,30 @@
 // ==UserScript==
 // @name         Twemoji Replacer
-// @version      0.8.0
-// @description  Replace emojis with Twemoji SVG and cache them locally using IndexedDB for high-speed performance.
+// @version      0.8.2
+// @description  Twemoji Replacer
 // @author       Gemini
 // @match        https://*/*
-// @exclude      https://github.com/*
-// @exclude      https://stackoverflow.com/*
-// @exclude      https://jsfiddle.net/*
-// @exclude      https://google.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
 // @run-at       document-start
-// @license      MIT
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) return;
+    const EXCLUDE = ['github.com', 'stackoverflow.com', 'jsfiddle.net'];
+    if (EXCLUDE.some(d => location.hostname.includes(d))) return;
 
-    const EMOJI_VERSION = "17.0.2"; 
-    const EMOJI_BASE = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@${EMOJI_VERSION}/assets/svg/`;
+    const EMOJI_BASE = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/";
     const DB_NAME = "LocalEmojiCache";
     const STORE_NAME = "svg_data";
     const NF_MARK = "NF";
 
-    // 防重複機制的關鍵
     const processedNodes = new WeakSet();
     let isWorking = false;
 
-    const EMOJI_REGEX = /([\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}][\u{1F3FB}-\u{1F3FF}]?|(\u{1F1E6}-\u{1F1FF}){2}|[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}][\u200D][\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{27BF}])\u{FE0F}?/gu;
+    // 終極正規表達式：優先匹配含 ZWJ (\u200D) 的長序列，再匹配膚色組合與單一符號
+    const EMOJI_REGEX = /([\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}](\u{FE0F}?\u{200D}\u{FE0F}?[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}])*[\u{1F3FB}-\u{1F3FF}]?|(\u{1F1E6}-\u{1F1FF}){2})/gu;
 
     let db = null;
     let isInit = false;
@@ -44,6 +39,19 @@
             } else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
             else { r.push(c.toString(16)); }
         }
+
+        // 如果是組合符號 (包含 ZWJ)
+        if (r.includes('200d')) {
+            // 修正：如果結尾是性別符號 (2642 男 / 2640 女) 且漏了 fe0f
+            // 根據你實測的伺服器規則，這裡必須補上 fe0f
+            const last = r[r.length - 1];
+            if ((last === '2642' || last === '2640') && !r.includes('fe0f')) {
+                r.push('fe0f');
+            }
+            return r.join('-');
+        }
+
+        // 一般單一符號，則移除 fe0f (如數字鍵)
         return r.filter(x => x !== 'fe0f').join('-');
     }
 
@@ -111,7 +119,7 @@
         return img;
     }
 
-    async function fixText(target) {
+   async function fixText(target) {
         if (!target || !db) return;
         const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
         const tasks = [];
@@ -119,8 +127,11 @@
         while (n = walker.nextNode()) {
             if (processedNodes.has(n)) continue;
             if (n.parentElement?.closest('script, style, textarea, pre, code, .twemojified')) continue;
+
+            // 使用重置過的 Regex 進行測試
+            EMOJI_REGEX.lastIndex = 0;
             if (EMOJI_REGEX.test(n.nodeValue || "")) {
-                processedNodes.add(n); // 掃到就立刻鎖定，防止重複處理
+                processedNodes.add(n);
                 tasks.push(n);
             }
         }
@@ -128,6 +139,7 @@
         for (const node of tasks) {
             const parent = node.parentNode;
             if (!parent) continue;
+
             const text = node.nodeValue;
             const frag = document.createDocumentFragment();
             let lastIdx = 0, match;
@@ -148,10 +160,12 @@
 
             if (hasValidEmoji) {
                 frag.appendChild(document.createTextNode(text.substring(lastIdx)));
-                if (parent.contains(node)) parent.replaceChild(frag, node);
+                if (parent.contains(node)) {
+                    parent.replaceChild(frag, node);
+                }
             }
         }
-    }
+   }
 
     const observer = new MutationObserver(() => {
         if (isWorking) return;
