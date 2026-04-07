@@ -1,18 +1,18 @@
 // ==UserScript==
-// @name         Twemoji Replacer
-// @version      0.8.5
-// @description  Twemoji Replacer
-// @author       Gemini
-// @match        https://*/*
-// @grant        GM_xmlhttpRequest
-// @connect      cdn.jsdelivr.net
+// @name          Twemoji Replacer
+// @version       0.9.0
+// @description   Twemoji Replacer
+// @author        Gemini
+// @match         https://*/*
+// @grant         GM_xmlhttpRequest
+// @connect       cdn.jsdelivr.net
 // @run-at       document-start
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const EXCLUDE = ['github.com', 'stackoverflow.com', 'jsfiddle.net', 'google.com'];
+    const EXCLUDE = ['github.com', 'stackoverflow.com', 'jsfiddle.net', 'google.com', 'facebook.com'];
     if (EXCLUDE.some(d => location.hostname.includes(d))) return;
 
     const EMOJI_BASE = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/";
@@ -29,23 +29,15 @@
         const r = []; let c = 0, p = 0, i = 0;
         while (i < unicode.length) {
             c = unicode.charCodeAt(i++);
-            if (p) {
-                r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16));
-                p = 0;
-            } else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
+            if (p) { r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16)); p = 0; }
+            else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
             else { r.push(c.toString(16)); }
         }
-
-        // 核心修正：組合符號 (ZWJ) 保留所有字元（包含 fe0f），避免男警/親吻等破圖
         if (r.includes('200d')) {
             const last = r[r.length - 1];
-            // 針對特定性別符號自動補全 fe0f
-            if ((last === '2642' || last === '2640') && !r.includes('fe0f')) {
-                r.push('fe0f');
-            }
+            if ((last === '2642' || last === '2640') && !r.includes('fe0f')) r.push('fe0f');
             return r.join('-');
         }
-        // 非組合符號則剔除 fe0f (如數字鍵 3)
         return r.filter(x => x !== 'fe0f').join('-');
     }
 
@@ -66,10 +58,18 @@
         });
     }
 
-    // --- 最佳化 2：具備重試機制的抓取邏輯 ---
-    async function fetchEmoji(raw) {
+    async function fetchEmoji(raw, imgElement) {
         let code = toCodePoint(raw);
         const _db = await initDB();
+
+        const applyImg = (data) => {
+            if (data && data !== NF_MARK) {
+                imgElement.src = data;
+                imgElement.style.opacity = "1";
+            } else {
+                imgElement.replaceWith(document.createTextNode(raw));
+            }
+        };
 
         if (_db) {
             const tx = _db.transaction(STORE_NAME, "readonly");
@@ -78,59 +78,37 @@
                 req.onsuccess = () => r(req.result);
                 req.onerror = () => r(null);
             });
-            if (cached) return (cached.data === NF_MARK) ? null : cached.data;
+            if (cached) return applyImg(cached.data);
         }
 
-        const tryFetch = (c) => new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: "GET", url: `${EMOJI_BASE}${c}.svg`, responseType: "blob", timeout: 4000,
-                onload: (res) => resolve(res.status === 200 ? res : null),
-                onerror: () => resolve(null)
-            });
-        });
-
-        // 第一次嘗試
-        let response = await tryFetch(code);
-
-        // 第二次嘗試：若失敗且含有 fe0f，嘗試「瘦身版」
-        if (!response && code.includes('fe0f')) {
-            const slimCode = code.replace(/-fe0f/g, '');
-            response = await tryFetch(slimCode);
-            if (response) code = slimCode;
-        }
-        // 第三次嘗試：若失敗且不含 fe0f 的 ZWJ 序列，嘗試「加長版」
-        else if (!response && !code.includes('fe0f') && code.includes('200d')) {
-            const longCode = code + '-fe0f';
-            response = await tryFetch(longCode);
-            if (response) code = longCode;
-        }
-
-        return new Promise((resolve) => {
-            if (response) {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const b64 = reader.result;
-                    initDB().then(d => { if(d) d.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ code, data: b64 }); });
-                    resolve(b64);
-                };
-                reader.readAsDataURL(response.response);
-            } else {
-                initDB().then(d => { if(d) d.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ code, data: NF_MARK }); });
-                resolve(null);
-            }
+        GM_xmlhttpRequest({
+            method: "GET", url: `${EMOJI_BASE}${code}.svg`, responseType: "blob", timeout: 4000,
+            onload: (res) => {
+                if (res.status === 200) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const b64 = reader.result;
+                        initDB().then(d => { if(d) d.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ code, data: b64 }); });
+                        applyImg(b64);
+                    };
+                    reader.readAsDataURL(res.response);
+                } else {
+                    initDB().then(d => { if(d) d.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ code, data: NF_MARK }); });
+                    applyImg(null);
+                }
+            },
+            onerror: () => applyImg(null)
         });
     }
 
-    async function replaceEmojis(target) {
-        if (!target || !db) return;
+    function replaceEmojis(target) {
+        if (!target) return;
 
         const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
         let n;
         while (n = walker.nextNode()) {
-            if (n.parentElement?.closest('script, style, textarea, pre, code, .twemojified')) continue;
-            if (n.parentElement?.hasAttribute('data-emoji-locking')) continue;
-
+            if (n.parentElement?.closest('script, style, textarea, .tw-p-lock')) continue;
             EMOJI_REGEX.lastIndex = 0;
             if (EMOJI_REGEX.test(n.nodeValue || "")) nodes.push(n);
         }
@@ -139,59 +117,56 @@
             const parent = node.parentNode;
             if (!parent) continue;
 
-            parent.setAttribute('data-emoji-locking', 'true');
-
             const text = node.nodeValue;
             const frag = document.createDocumentFragment();
             let lastIdx = 0, match;
             EMOJI_REGEX.lastIndex = 0;
-            let success = false;
+            let found = false;
 
             while ((match = EMOJI_REGEX.exec(text)) !== null) {
+                found = true;
                 frag.appendChild(document.createTextNode(text.substring(lastIdx, match.index)));
-                const b64 = await fetchEmoji(match[0]);
-                if (b64) {
-                    const img = document.createElement('img');
-                    img.src = b64; img.alt = match[0]; img.className = "twemojified";
-                    img.draggable = false;
-                    // 最佳化 3：修正對齊樣式
-                    Object.assign(img.style, {
-                        height: "1.1em", width: "1.1em",
-                        verticalAlign: "middle", margin: "0 0.05em 0.1em 0.05em",
-                        display: "inline-block"
-                    });
-                    frag.appendChild(img);
-                    success = true;
-                } else {
-                    frag.appendChild(document.createTextNode(match[0]));
-                }
+
+                const lockSpan = document.createElement('span');
+                lockSpan.className = "tw-p-lock";
+                lockSpan.style.display = "inline-block";
+
+                const img = document.createElement('img');
+                img.className = "twemojified";
+                img.alt = match[0];
+                Object.assign(img.style, {
+                    height: "1.1em", width: "1.1em", verticalAlign: "middle",
+                    margin: "0 0.05em 0.1em 0.05em", display: "inline-block",
+                    opacity: "0", transition: "opacity 0.1s"
+                });
+
+                lockSpan.appendChild(img);
+                frag.appendChild(lockSpan);
+                fetchEmoji(match[0], img);
                 lastIdx = EMOJI_REGEX.lastIndex;
             }
 
-            if (success) {
+            if (found) {
                 frag.appendChild(document.createTextNode(text.substring(lastIdx)));
-                if (parent.contains(node)) parent.replaceChild(frag, node);
+                parent.replaceChild(frag, node);
             }
-            parent.removeAttribute('data-emoji-locking');
-            parent.setAttribute('data-emoji-done', 'true');
         }
     }
 
     let timer;
     const observer = new MutationObserver(() => {
         clearTimeout(timer);
-        timer = setTimeout(() => replaceEmojis(document.body), 150);
+        timer = setTimeout(() => replaceEmojis(document.body), 50);
     });
 
     const start = async () => {
         await initDB();
-        await replaceEmojis(document.body);
-        observer.observe(document.body, { childList: true, subtree: true });
+        replaceEmojis(document.body);
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-        // 最佳化 4：針對 Threads 虛擬列表捲動的最佳化補償
         window.addEventListener('scroll', () => {
             clearTimeout(timer);
-            timer = setTimeout(() => replaceEmojis(document.body), 250);
+            timer = setTimeout(() => replaceEmojis(document.body), 150);
         }, { passive: true });
     };
 
