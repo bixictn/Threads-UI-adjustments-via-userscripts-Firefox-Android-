@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2
+// @version      0.9.3
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -156,39 +156,60 @@
     }
 
     // 4. 找回的功能：僅限首篇的內文縮排 (針對 /post/ 頁面)
-    function handlePostPageIndent() {
-        if (!window.location.href.includes('/post/')) return;
-        const postPagelet = document.querySelector('[data-pagelet="threads_post_page_0"]');
-        if (!postPagelet) return;
+function handlePostPageIndent() {
+    if (!window.location.href.includes('/post/')) return;
 
-        const headers = Array.from(postPagelet.querySelectorAll('div[style*="--x-columnGap"]')).filter(header => {
-            return !!header.querySelector('a[href*="/@"]:not([href*="/post/"])');
+    // --- 第一步：鎖定 page_0 ---
+    const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
+    if (!pageZero) return;
+
+    // --- 第二步：在 page_0 內掃描所有貼文塊 ---
+    const posts = pageZero.querySelectorAll('[data-pressable-container="true"]');
+
+    posts.forEach((post) => {
+        // 1. 物理連線偵測：找看看有沒有那條垂直線
+        const threadLine = Array.from(post.querySelectorAll('div')).find(div => {
+            const s = window.getComputedStyle(div);
+            return s.position === 'absolute' &&
+                   parseInt(s.width) > 0 && parseInt(s.width) <= 4 &&
+                   s.backgroundColor !== 'transparent' &&
+                   div.offsetHeight > 20;
         });
 
-        headers.forEach((header) => {
-            const postArea = header.parentElement?.parentElement?.parentElement;
-            if (!postArea) return;
-            const hasThreadLine = Array.from(postArea.querySelectorAll('div')).find(div => {
-                const style = window.getComputedStyle(div);
-                return style.backgroundColor !== 'transparent' && parseInt(style.width) <= 5 && style.position === 'absolute';
+        // 2. 邏輯核心：只有「無線」的文才需要手動縮排
+        if (!threadLine) {
+            // 抓取內文文字 (dir="auto") 與 媒體連結 (href 包含 /media)
+            const contentNodes = post.querySelectorAll('[dir="auto"], a[href*="/media"]');
+
+            contentNodes.forEach(node => {
+                // --- 排除 Header/Footer ---
+                if (node.tagName === 'TIME' || node.closest('time')) return;
+                if (node.closest('a[href*="/@"]:not([href*="/post/"])')) return;
+                if (node.closest('[role="button"]') || node.closest('.x4vbgl9')) return;
+
+                // --- 執行右移 52px ---
+                if (!node.dataset.indentDone) {
+                    // 如果是 <a> (媒體)，直接移自己；如果是 <span> (文字)，移父容器
+                    let target = (node.tagName === 'A') ? node : node.parentElement;
+
+                    // 確保位移對象在貼文容器內
+                    if (target !== post && post.contains(target)) {
+                        target.style.setProperty('margin-left', '52px', 'important');
+                        target.style.setProperty('width', 'calc(100% - 52px)', 'important');
+
+                        // 修正媒體容器負 Margin 補償 (這對 media 連結特別重要)
+                        const negMargin = target.querySelector('div[style*="margin-inline-start"]');
+                        if (negMargin) {
+                            negMargin.style.setProperty('margin-inline-start', '0px', 'important');
+                        }
+
+                        node.dataset.indentDone = "true";
+                    }
+                }
             });
-            if (!hasThreadLine) applyIndent(header);
-        });
-    }
-
-    function applyIndent(header) {
-        const idWrapper = header.parentElement?.parentElement;
-        let contentNode = idWrapper?.nextElementSibling;
-        while (contentNode && contentNode.innerText.trim() === "" && contentNode.nextElementSibling) {
-            contentNode = contentNode.nextElementSibling;
         }
-        if (contentNode && !contentNode.dataset.indentDone) {
-            contentNode.style.setProperty('margin-left', '50px', 'important');
-            contentNode.style.setProperty('width', 'calc(100% - 50px)', 'important');
-            contentNode.dataset.indentDone = "true";
-        }
-    }
-
+    });
+}
     // 5. 按鈕列靠右邏輯
     function applyButtonStyle(likeIcon) {
         let container = likeIcon.parentElement;
