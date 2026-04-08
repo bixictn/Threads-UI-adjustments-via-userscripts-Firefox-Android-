@@ -154,15 +154,15 @@
     }
 
 
-function getTimestampFromMonth(dateStr) {
-    if (!dateStr || dateStr.includes("未知")) return 0;
+    function getTimestampFromMonth(dateStr) {
+        if (!dateStr || dateStr.includes("未知")) return 0;
 
-    // 把 "2024年10月" 轉換成 "2024/10/01" 讓瀏覽器看得懂
-    const cleanStr = dateStr.replace('年', '/').replace('月', '/01');
-    const parsedDate = new Date(cleanStr);
+        // 把 "2024年10月" 轉換成 "2024/10/01" 讓瀏覽器看得懂
+        const cleanStr = dateStr.replace('年', '/').replace('月', '/01');
+        const parsedDate = new Date(cleanStr);
 
-    return parsedDate.getTime(); // 回傳毫秒數
-}
+        return parsedDate.getTime(); // 回傳毫秒數
+    }
 
     function renderUI(scope, data, isStale = false) {
         const img = scope.querySelector('img');
@@ -170,16 +170,19 @@ function getTimestampFromMonth(dateStr) {
         if (!container) return;
 
         let display = `📅\n${data.joined}`;
+        if(getTimestampFromMonth("2025年12月")-getTimestampFromMonth(data.joined)<=0){
+            display = `🔍\n${data.joined}`;
+        }
         if (data.location) display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
 
         const now = Date.now();
         const joinedTs = getTimestampFromMonth(data.joined);
-    const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
+        const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
 
-    // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
-    if (joinedTs > 0 && (now - joinedTs) < TWO_MONTHS) {
-        display += "\n✨[新帳號]";
-    }
+        // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
+        if (joinedTs > 0 && (now - joinedTs) < TWO_MONTHS) {
+            display += "\n✨[新帳號]";
+        }
         container.classList.add("cake-avatar-anchor");
         container.setAttribute('data-cake-date', display);
         if (!isStale) img.dataset.processed = "done";
