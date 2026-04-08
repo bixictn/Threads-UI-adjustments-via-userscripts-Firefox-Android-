@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.5
+// @version       0.4.6
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
