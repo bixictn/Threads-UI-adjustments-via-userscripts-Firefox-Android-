@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.4
+// @version      0.9.5
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -22,7 +22,7 @@
         .__fb-dark-mode a[href="/"] svg[aria-label="Threads"],
         .__fb-light-mode a[href="/"] svg[aria-label="Threads"],
         a[href="/"] div svg[aria-label="Threads"],
-        div[role="navigation"] a[href="/"] svg[aria-label="Threads"] {       
+        div[role="navigation"] a[href="/"] svg[aria-label="Threads"] {
             cursor: pointer !important;
             fill: #D4AF37 !important;
             transition: transform 0.2s ease !important;
@@ -72,7 +72,26 @@
     `;
     document.head.appendChild(style);
 
-    // 2. 處理導覽列 Active 狀態邏輯
+
+    function smartReload() {
+        const currentPath = window.location.pathname;
+        if (!currentPath.includes('/post/')) return;
+
+        // 從 SessionStorage 讀取上次重整的網址
+        const lastReloadedPath = sessionStorage.getItem('last_reloaded_path');
+
+        // 如果當前網址跟上次重整的一樣，代表已經「打掉重練」過了
+        if (lastReloadedPath === currentPath) return;
+
+        // 否則，執行「打掉重練」
+        sessionStorage.setItem('last_reloaded_path', currentPath);
+
+        // 暴力停止並重整
+        window.stop();
+        document.documentElement.innerHTML = '<style>html{background:#101010;}</style>';
+        window.location.reload();
+    }
+
     function updateNavActiveState() {
         const currentPath = window.location.pathname;
         const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
@@ -236,6 +255,17 @@
 
     // 主執行迴圈
     function mainLoop() {
+        const currentPath = window.location.pathname;
+
+        // 偵測 SPA 導航（點擊連結網址變了，但頁面沒重整）
+        if (currentPath.includes('/post/')) {
+            const lastReloaded = sessionStorage.getItem('last_reloaded_path');
+            if (lastReloaded !== currentPath) {
+                smartReload();
+                return;
+            }
+        }
+
         updateNavActiveState();
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         handlePostPageIndent();
