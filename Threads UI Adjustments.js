@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6.1
+// @version      0.9.6.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -163,6 +163,19 @@
         // 如果 el 本身是容器，且它的父層也是容器，那它就是文中文
         return el.matches('[data-pressable-container="true"]') &&
             el.parentElement.closest('[data-pressable-container="true"]');
+    }
+
+    function handleMainPageindent(){
+        const posts = document.querySelectorAll('[data-pressable-container="true"]');
+        if (!posts) return;
+        for (const [index, post] of posts.entries()) {
+            // 剔除帶有 --x-height 的 div
+            if(post.dataset.processed)return;
+            if(post.querySelector('[data-pressable-container="true"]')){
+                handlePostPageIndentInPost(post);//有引文
+                post.dataset.processed=true;
+            }
+        }
     }
 
     function handlePostPageIndentInPost(post){
@@ -396,7 +409,7 @@
             }
         });
      }
-    
+
     function cleanContent() {
         document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
             let hasObj = false;
@@ -427,6 +440,7 @@
             }
             handlePostPageIndent();
         } else {
+            handleMainPageindent();
             lastPath = currentPath;
             hideBlackout();
         }
