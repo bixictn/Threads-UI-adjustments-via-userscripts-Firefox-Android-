@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6
+// @version      0.9.6.1
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -381,6 +381,35 @@
         });
     }
 
+     function updateNavActiveState() {
+        const currentPath = window.location.pathname;
+        const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            const isActive = (href === currentPath) ||
+                  (currentPath === '/' && href === '/') ||
+                  (href && href !== '/' && currentPath.startsWith(href));
+            if (isActive) {
+                link.setAttribute('data-active', 'true');
+            } else {
+                link.removeAttribute('data-active');
+            }
+        });
+     }
+    
+    function cleanContent() {
+        document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
+            let hasObj = false;
+            span.childNodes.forEach(node => {
+                if (node.nodeType === 3 && node.nodeValue.includes('\uFFFC')) {
+                    node.nodeValue = node.nodeValue.replace(/\uFFFC/g, '');
+                    hasObj = true;
+                }
+            });
+            if (hasObj) span.setAttribute('data-obj-cleaned', 'true');
+        });
+    }
+
 
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
@@ -404,14 +433,9 @@
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
-
-        // 導覽列 Active 狀態
-        document.querySelectorAll('a[role="link"], div[role="button"]').forEach(link => {
-            const href = link.getAttribute('href');
-            const isActive = (href === currentPath) || (currentPath === '/' && href === '/') || (href && href !== '/' && currentPath.startsWith(href));
-            isActive ? link.setAttribute('data-active', 'true') : link.removeAttribute('data-active');
-        });
+        updateNavActiveState();
         autoClickSpoilers();
+        cleanContent();
     }
 
     const observer = new MutationObserver(mainLoop);
