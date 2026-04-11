@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.7.5
+// @version      0.2.7.6
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -50,13 +50,13 @@
             background: #FFFFFF !important;
             border: 2px solid #D4AF37 !important;
             color: #000000 !important;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.15) !important;
+            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
         }
         .__fb-light-mode #threads-idb-mini-btn {
             background-color: rgba(250, 250, 250, 0.9) !important;
             border: 1.5px solid #D4AF37 !important;
             color: #000000 !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
         }
 
         /* 暗色模式下的清單項目微調 */
@@ -110,6 +110,9 @@
         .__fb-light-mode #btn-import-addon {
             background: #D4AF37 !important;
             color: #fff !important;
+        }
+        a[href="/"] svg[aria-label="Threads"] path {
+            fill: #D4AF37 !important;
         }
 }
     `;
