@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.7.6
+// @version      0.2.7.7
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -234,7 +234,7 @@
             width: 80% !important;
             border-radius: 16px !important;
             padding: 20px !important;
-            z-index: 2147483646 !important;
+            z-index: 1147483646 !important;
             animation: panelFadeIn 0.2s ease-out;
             touch-action: auto;
         `;
@@ -346,7 +346,7 @@
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
             btn.innerHTML = '📊';
-            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:2147483647!important;backdrop-filter:blur(4px);`;
+            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:1147483647!important;backdrop-filter:blur(4px);`;
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
         } else {
