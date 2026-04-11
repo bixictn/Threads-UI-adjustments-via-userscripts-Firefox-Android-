@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.1
+// @version      0.9.7.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -19,22 +19,57 @@
     style.textContent = `
         [data-pagelet="threads_post_page_0"] { opacity: 0 !important; }
 
+        /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
+
+        /* 深色模式 & 亮色模式通用：針對 Threads Logo SVG 進行處理 */
         .__fb-dark-mode a[href="/"] svg[aria-label="Threads"],
         .__fb-light-mode a[href="/"] svg[aria-label="Threads"],
-        a[href="/"] div svg[aria-label="Threads"] {
-            cursor: pointer !important; fill: #D4AF37 !important; transition: transform 0.2s ease !important;
+        a[href="/"] div svg[aria-label="Threads"],
+        div[role="navigation"] a[href="/"] svg[aria-label="Threads"] {
+            cursor: pointer !important;
+            fill: #D4AF37 !important;
+            transition: transform 0.2s ease !important;
         }
+
+        /* 點擊時的縮放效果 */
+        a[href="/"]:active svg[aria-label="Threads"] {
+            width:22px;
+            height:22px;
+            border: 2px solid #D4AF37 !important;
+            border-radius: 50% !important;
+            padding: 4px !important;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.6) !important;
+        }
+
+        /* --- 導覽列 Active 狀態 (需求 2) --- */
+        a[data-active="true"] svg,
+        div[role="button"][data-active="true"] svg {
+            color: #D4AF37 !important;
+            fill: #D4AF37 !important;
+        }
+        a[data-active="true"] svg path,
+        div[role="button"][data-active="true"] svg path {
+            fill: #D4AF37 !important;
+            stroke: #D4AF37 !important;
+        }
+
+        /* 導覽列圖示縮小 (排除主 Logo) */
         nav svg:not([aria-label="Threads"]) {
-            transform: scale(0.7) !important; transform-origin: center center !important;
+            transform: scale(0.7) !important;
+            transform-origin: center center !important;
         }
-        div span > span {
-            font-size: 18px !important;
-        }
+
+        /* 內文放大 */
+        div span > span { font-size: 18px !important; }
+
+        /* 按鈕列靠右容器樣式 */
         .custom-stack-move {
-            display: flex !important; justify-content: flex-end !important; width: 100% !important;
-         }
+            display: flex !important;
+            justify-content: flex-end !important;
+            width: 100% !important;
+        }
 
         #ultimate-blackout {
             position: fixed !important;
