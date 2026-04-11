@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7
+// @version      0.9.7.1
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -356,93 +356,7 @@
         }
     }
 
-    function waitUntilDetached(btn, callback) {
-        let attempts = 0;
-        const check = setInterval(() => {
-            attempts++;
-
-            // 關鍵判定：檢查這個按鈕是否還連接在網頁 document 上
-            if (!btn.isConnected || attempts > 20) {
-                clearInterval(check);
-                if (!btn.isConnected) {
-                    callback(); // 按鈕真的從網頁消失了，執行上色
-                }
-            }
-        }, 100);
-    }
-
-
-    function autoClickSpoilers() {
-        // 1. 文字劇透：維持原有邏輯
-        document.querySelectorAll('span[data-text-fragment="spoiler"]').forEach(el => {
-            const btn = el.closest('div[role="button"]');
-            const spoilerText = el.innerText.trim();
-            const parent = btn?.parentElement; // 先抓好父層，因為點擊後 btn 會斷開
-
-            if (btn && !btn.dataset.autoClicked) {
-                btn.dataset.autoClicked = "true";
-                btn.click();
-
-                // 等到這個「舊按鈕」真正斷開連結
-                waitUntilDetached(btn, () => {
-                    // 這時候 parent 裡面的內容應該已經被 React 換成新的純文字 span 了
-                    const newSpans = parent.querySelectorAll('span');
-                    newSpans.forEach(s => {
-                        // 找到文字符合且沒有邊框的新 span
-                        if (s.innerText.trim() === spoilerText && !s.dataset.revealedBorder) {
-                            s.style.setProperty('border', '1.5px solid #D4AF37', 'important');
-                            s.style.setProperty('border-radius', '6px', 'important');
-                            s.style.setProperty('padding', '0 4px', 'important');
-                            s.style.setProperty('display', 'inline-block', 'important');
-                            s.style.setProperty('vertical-align', 'middle', 'important');
-                            s.dataset.revealedBorder = "true";
-                        }
-                    });
-                });
-            }
-        });
-
-        // 2. 影音劇透：搜尋所有內容為「劇透」的 span
-        document.querySelectorAll('span').forEach(span => {
-            // 偵測文字內容是否為劇透或敏感內容
-            const isSpoilerText = span.innerText === '劇透' || span.innerText === '敏感內容';
-
-            if (isSpoilerText) {
-                const btn = span.closest('div[role="button"]');
-
-                if (btn && !btn.dataset.autoClicked) {
-                    btn.click();
-                    btn.dataset.autoClicked = "true";
-                    const parent=btn.parentElement;
-                    waitUntilDetached(btn, () => {
-                        if (!parent) return;
-
-                        const mediaElements = parent.querySelectorAll('img, video');
-
-                        mediaElements.forEach(s => {
-                            if (!s.dataset.revealedBorder) {
-                                // 加上金色邊框
-                                s.style.setProperty('border', '2px solid #D4AF37', 'important');
-                                s.style.setProperty('border-radius', '12px', 'important'); // 影音通常圓角大一點比較好看
-
-                                // 修正：針對影音建議加上這行，防止邊框把圖片擠小
-                                s.style.setProperty('box-sizing', 'border-box', 'important');
-
-                                // 雖然影音可以加 padding，但通常設為 0 或直接貼齊比較俐落
-                                s.style.setProperty('padding', '2px', 'important');
-                                s.style.setProperty('margin', '5px 0', 'important');
-                                s.style.setProperty('display', 'block', 'important'); // 影音建議用 block 比較好置中排版
-
-                                s.dataset.revealedBorder = "true";
-                            }
-                        });
-                    });
-                }
-            }
-        });
-    }
-
-     function updateNavActiveState() {
+    function updateNavActiveState() {
         const currentPath = window.location.pathname;
         const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
         navLinks.forEach(link => {
@@ -456,7 +370,7 @@
                 link.removeAttribute('data-active');
             }
         });
-     }
+    }
 
     function cleanContent() {
         document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
@@ -496,7 +410,7 @@
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
         updateNavActiveState();
-        autoClickSpoilers();
+
         cleanContent();
     }
 
