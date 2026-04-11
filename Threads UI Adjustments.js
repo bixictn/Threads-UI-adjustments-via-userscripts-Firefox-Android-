@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6.2
+// @version      0.9.7
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -160,27 +160,24 @@
     }
 
     function isNestedPost(el) {
-        // 如果 el 本身是容器，且它的父層也是容器，那它就是文中文
+        // 如果 el 本身是容器，且它的子層也有容器，那它就是文中文
         return el.matches('[data-pressable-container="true"]') &&
-            el.parentElement.closest('[data-pressable-container="true"]');
+            el.querySelector('[data-pressable-container="true"]');
     }
 
     function handleMainPageindent(){
         const posts = document.querySelectorAll('[data-pressable-container="true"]');
         if (!posts) return;
         for (const [index, post] of posts.entries()) {
-            // 剔除帶有 --x-height 的 div
-            if(post.dataset.processed)return;
-            if(post.querySelector('[data-pressable-container="true"]')){
-                handlePostPageIndentInPost(post);//有引文
-                post.dataset.processed=true;
+            const inpost = post.querySelector('[data-pressable-container="true"]')
+            if(isNestedPost(post) && inpost){
+                handleInPostPageIndent(inpost);//有引文
+                inpost.dataset.processed=true;
             }
         }
     }
 
-    function handlePostPageIndentInPost(post){
-        let inpost = post.querySelector('[data-pressable-container="true"]');
-        if(!inpost)return;
+    function handleInPostPageIndent(inpost){
         const anchors = inpost.querySelectorAll('[dir="auto"]');
         let check=0;
         for(const [index,anchor] of anchors.entries()){
@@ -193,9 +190,27 @@
             if(check>2)break;
         }
     }
+
+    function handleAllInPostPageIndent(){
+        const pages = document.querySelectorAll('[data-pagelet*="threads_post_page"]');
+        for (const [index, page] of pages.entries()) {
+            const posts=page.querySelectorAll('[data-pressable-container="true"]');
+            for(const [pageindex, post] of posts.entries()){
+                const inpost = post.querySelector('[data-pressable-container="true"]')
+                if(isNestedPost(post) && inpost){
+                    handleInPostPageIndent(inpost);//有引文
+                    inpost.dataset.processed=true;
+                }
+            }
+        }
+    }
+
     function handlePostPageIndent() {
         let nestedpost=0;
         if (!window.location.href.includes('/post/')) return;
+
+        handleAllInPostPageIndent();//單獨處理所有引文
+
         const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
         if (!pageZero || pageZero.dataset.processed) return;
 
@@ -207,18 +222,17 @@
         const posts = pageZero.querySelectorAll('[data-pressable-container="true"]');
 
         for (const [index, post] of posts.entries()) {
-            // 剔除帶有 --x-height 的 div
 
             if(isNestedPost(post))nestedpost=1;//有引文
             else nestedpost=0;
-
+            // 剔除帶有 --x-height 的 div
             const lines = post.querySelectorAll('div[class*="html-div"]:not([style*="--x-height"])');
 
-            if(nestedpost === 0 ){
-                if (lines.length === 0) {
+            if(nestedpost === 1 ){//有引文
 
-                    handlePostPageIndentInPost(post);
+                let checkdiv = post.querySelector('[data-pressable-container="true"]').parentElement;//單有引文父層只為<div>
 
+                if(lines.length===0 && checkdiv.className != ''){//無線
                     const anchors = post.querySelectorAll('[dir="auto"]');
                     for(let anchor of anchors){
                         if (anchor.querySelector('time') || anchor.closest('a[href*="/@"]:not([href*="/post/"])') || anchor.closest('[role="button"]')) continue;
@@ -252,17 +266,14 @@
                         }
                     }
                 }
-            }
-            else if(nestedpost === 1){
-                let target=post.parentElement;
-                if (target.className === '') {
+                else if(lines.length===0 && checkdiv.className === ''){//單有引文
+
+                    let target = checkdiv;
                     if (!target.dataset.indentDone) {
                         target.style.setProperty('margin-left', '52px', 'important');
                         target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                         target.dataset.indentDone = "true";
                         pageZero.dataset.processed = "true";
-
-                        handlePostPageIndentInPost(post);
 
                         if (index === 0) {
                             window.scrollTo({ top: 0, behavior: 'instant' });
@@ -277,6 +288,43 @@
 
                         hideBlackout(); // 完成，關閉黑幕
                         return;
+                    }
+                }
+                //else 文旁有線->跳過
+            }
+            else if(nestedpost === 0 && lines.length === 0){//內文無引文, 或是引文本身
+                if (!post.parentElement.closest('[data-pressable-container="true"]')) {//沒有上層文章就是本文
+                    const anchors = post.querySelectorAll('[dir="auto"]');
+                    for(let anchor of anchors){
+                        if (anchor.querySelector('time') || anchor.closest('a[href*="/@"]:not([href*="/post/"])') || anchor.closest('[role="button"]')) continue;
+                        let target = anchor.parentElement;
+                        let p = 0;
+                        while (target && target.tagName === 'DIV' && p < 3) {
+                            if (target.className === '') {
+                                if (!target.dataset.indentDone) {
+                                    target.style.setProperty('margin-left', '52px', 'important');
+                                    target.style.setProperty('width', 'calc(100% - 52px)', 'important');
+                                    target.dataset.indentDone = "true";
+                                    pageZero.dataset.processed = "true";
+
+                                    if (index === 0) {
+                                        window.scrollTo({ top: 0, behavior: 'instant' });
+                                        [0, 50, 150, 300].forEach(delay => {
+                                            setTimeout(() => {
+                                                window.scrollTo(0, 0);
+                                                document.documentElement.scrollTop = 0;
+                                                document.body.scrollTop = 0;
+                                            }, delay);
+                                        });
+                                    }
+
+                                    hideBlackout(); // 完成，關閉黑幕
+                                    return;
+                                }
+                            }
+                            target = target.parentElement;
+                            p++;
+                        }
                     }
                 }
             }
