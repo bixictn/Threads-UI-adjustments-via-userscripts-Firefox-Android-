@@ -14,7 +14,6 @@
 
     let lastPath = "";
 
-    // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
         [data-pagelet="threads_post_page_0"] { opacity: 0 !important; }
@@ -292,7 +291,7 @@
                                         });
                                     }
 
-                                    hideBlackout(); // 完成，關閉黑幕
+                                    hideBlackout(); // 完成，關閉毛玻璃背景
                                     return;
                                 }
                             }
@@ -321,7 +320,7 @@
                             });
                         }
 
-                        hideBlackout(); // 完成，關閉黑幕
+                        hideBlackout(); // 完成，關閉毛玻璃背景
                         return;
                     }
                 }
@@ -353,7 +352,7 @@
                                         });
                                     }
 
-                                    hideBlackout(); // 完成，關閉黑幕
+                                    hideBlackout(); // 完成，關閉毛玻璃背景
                                     return;
                                 }
                             }
@@ -433,7 +432,7 @@
                     pageZero.removeAttribute('data-processed');
                     pageZero.style.setProperty('opacity', '0', 'important');
                 }
-                showBlackout(); // 顯示黑幕
+                showBlackout(); // 顯示毛玻璃背景
             }
             handlePostPageIndent();
         } else {
