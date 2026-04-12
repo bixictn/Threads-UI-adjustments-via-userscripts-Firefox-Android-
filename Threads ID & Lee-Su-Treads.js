@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.6
+// @version       0.4.6.1
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -67,16 +67,20 @@
     // --- 3. 核心邏輯 ---
     async function doSmartSync() {
         if (!db) return;
-        const articles = document.querySelectorAll('article, [data-pressable-container="true"]');
+        const articles = document.querySelectorAll('[data-pressable-container="true"]');
 
         for (const scope of articles) {
             const img = scope.querySelector('img');
             if (!img || img.dataset.processed === "done") continue;
 
-            const userLink = scope.querySelector('a[href*="/@"]');
+            const timeElement = scope.querySelector('time');
+            if (!timeElement) continue;
+
+            const userLink = timeElement.closest('a[href*="/@"]');
             if (!userLink) continue;
 
             const userId = userLink.getAttribute('href').split('?')[0].split('/@')[1].replace(/\/$/, '');
+
 
             const cached = await new Promise(res => {
                 const tx = db.transaction([STORE_NAME], 'readonly');
@@ -104,7 +108,7 @@
                 if (now - lastClick > 5000) {
                     delete badge.dataset.cakeClicked;
                     delete badge.dataset.cakeStatus;
-                    console.log(`[🔄 重試] ${userId} 可能遇到 ID null，現在重新嘗試點擊...`);
+                    console.log(`[🔄 重試] ${userId} 取資料中...`);
                 }
             }
 
