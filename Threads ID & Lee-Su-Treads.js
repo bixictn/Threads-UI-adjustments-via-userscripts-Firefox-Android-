@@ -108,7 +108,7 @@
                 if (now - lastClick > 5000) {
                     delete badge.dataset.cakeClicked;
                     delete badge.dataset.cakeStatus;
-                    console.log(`[🔄 重試] ${userId} 取資料中...`);
+                    console.log(`[🔄] ${userId} 取資料中...`);
                 }
             }
 
