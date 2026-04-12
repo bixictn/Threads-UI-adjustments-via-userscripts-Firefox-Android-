@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.7.8
+// @version      0.2.8
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -10,7 +10,7 @@
 
 (function() {
     'use strict';
-
+    const version='v0.2.8';
     // 判斷當寬度小於高度時（直向螢幕/手機模式），開啟水平居中校正
     let modeadd = (window.innerWidth < window.innerHeight)
               ? "transform: translateX(-50%) !important;"
@@ -248,7 +248,7 @@
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid rgba(128,128,128,0.2);padding-bottom:10px;">
-                <span style="font-weight:bold;">📂 資料中心 v0.2.7</span>
+                <span style="font-weight:bold;">📂 資料中心 ${version}</span>
                 <span id="close-panel-x" style="font-size:16px;cursor:pointer;opacity:0.5;">✕</span>
             </div>
             <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
@@ -286,6 +286,28 @@
 
         document.getElementById('btn-import-std').onclick = () => { importMode = 'normal'; document.getElementById('hidden-file-input').click(); };
         document.getElementById('btn-import-addon').onclick = () => { importMode = 'addon'; document.getElementById('hidden-file-input').click(); };
+        document.getElementById('btn-clear-all').onclick = async () => {
+            if (!confirm("⚠️ 確定要刪除資料庫內所有快取資料嗎？\n此動作無法還原！")) return;
+
+            const db = await getDB();
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+
+            // 2. 執行清除指令
+            const req = store.clear();
+
+            req.onsuccess = () => {
+                alert("✅ 所有資料已刪除");
+                // 3. 更新 UI 介面
+                updatePanelUI({ count: 0, latest: [] });
+            };
+
+            req.onerror = (err) => {
+                console.error("清除失敗:", err);
+                alert("❌ 刪除失敗，請查看主控台報錯");
+            };
+        };
+
         document.getElementById('close-panel-x').onclick = () => closePanel();
 
         document.getElementById('hidden-file-input').onchange = e => {
