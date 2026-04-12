@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.6.1
+// @version       0.4.6.5
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -76,11 +76,14 @@
             const timeElement = scope.querySelector('time');
             if (!timeElement) continue;
 
-            const userLink = timeElement.closest('a[href*="/@"]');
+            const userLink = scope.querySelector('time')?.closest('a[href*="/"]');
+            let userId;
+            if (userLink) {
+                const href = userLink.getAttribute('href').split('?')[0];
+                userId = href.replace(/^\/@?/, '').split('/')[0];
+                console.log("ID:", userId);
+            }
             if (!userLink) continue;
-
-            const userId = userLink.getAttribute('href').split('?')[0].split('/@')[1].replace(/\/$/, '');
-
 
             const cached = await new Promise(res => {
                 const tx = db.transaction([STORE_NAME], 'readonly');
