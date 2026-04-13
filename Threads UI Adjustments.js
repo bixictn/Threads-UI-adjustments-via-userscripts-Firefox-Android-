@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.2
+// @version      0.9.7.3
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -13,7 +13,9 @@
     'use strict';
 
     let lastPath = "";
+    let isBackAction = false;
 
+    // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
         [data-pagelet="threads_post_page_0"] { opacity: 0 !important; }
@@ -280,18 +282,9 @@
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
 
-                                    if (index === 0) {
-                                        window.scrollTo({ top: 0, behavior: 'instant' });
-                                        [0, 50, 150, 300].forEach(delay => {
-                                            setTimeout(() => {
-                                                window.scrollTo(0, 0);
-                                                document.documentElement.scrollTop = 0;
-                                                document.body.scrollTop = 0;
-                                            }, delay);
-                                        });
-                                    }
+                                    toTop(index);
 
-                                    hideBlackout(); // 完成，關閉毛玻璃背景
+                                    hideBlackout(); // 完成，關閉黑幕
                                     return;
                                 }
                             }
@@ -309,18 +302,9 @@
                         target.dataset.indentDone = "true";
                         pageZero.dataset.processed = "true";
 
-                        if (index === 0) {
-                            window.scrollTo({ top: 0, behavior: 'instant' });
-                            [0, 50, 150, 300].forEach(delay => {
-                                setTimeout(() => {
-                                    window.scrollTo(0, 0);
-                                    document.documentElement.scrollTop = 0;
-                                    document.body.scrollTop = 0;
-                                }, delay);
-                            });
-                        }
+                        toTop(index);
 
-                        hideBlackout(); // 完成，關閉毛玻璃背景
+                        hideBlackout(); // 完成，關閉黑幕
                         return;
                     }
                 }
@@ -341,18 +325,9 @@
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
 
-                                    if (index === 0) {
-                                        window.scrollTo({ top: 0, behavior: 'instant' });
-                                        [0, 50, 150, 300].forEach(delay => {
-                                            setTimeout(() => {
-                                                window.scrollTo(0, 0);
-                                                document.documentElement.scrollTop = 0;
-                                                document.body.scrollTop = 0;
-                                            }, delay);
-                                        });
-                                    }
+                                    toTop(index);
 
-                                    hideBlackout(); // 完成，關閉毛玻璃背景
+                                    hideBlackout(); // 完成，關閉黑幕
                                     return;
                                 }
                             }
@@ -365,6 +340,22 @@
         }
 
         hideBlackout();
+    }
+
+    function toTop(index){
+
+        if (index === 0) {
+            if (!isBackAction) {
+                window.scrollTo({ top: 0, behavior: 'instant' });
+                [0, 50, 150, 300].forEach(delay => {
+                    setTimeout(() => {
+                        window.scrollTo(0, 0);
+                        document.documentElement.scrollTop = 0;
+                        document.body.scrollTop = 0;
+                    }, delay);
+                });
+            }
+        }
     }
 
     function applyButtonStyle(likeIcon) {
@@ -432,7 +423,7 @@
                     pageZero.removeAttribute('data-processed');
                     pageZero.style.setProperty('opacity', '0', 'important');
                 }
-                showBlackout(); // 顯示毛玻璃背景
+                showBlackout(); // 顯示黑幕
             }
             handlePostPageIndent();
         } else {
@@ -451,4 +442,9 @@
     const observer = new MutationObserver(mainLoop);
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
+    window.addEventListener('popstate', () => {
+        isBackAction = true;
+        // 1秒後重置，因為排版修正通常發生在切換後的幾百毫秒內
+        setTimeout(() => { isBackAction = false; }, 1000);
+    });
 })();
