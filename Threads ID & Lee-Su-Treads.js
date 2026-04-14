@@ -15,6 +15,7 @@
     const STORE_NAME = 'profilecache';
     const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
     let db;
+    const db_version=1;
 
     // --- 1. Fetch 攔截器 ---
     const originalFetch = window.fetch;
@@ -49,11 +50,23 @@
     // --- 2. 工具函式 ---
     const initDB = () => {
         return new Promise((resolve) => {
-            const request = indexedDB.open(DB_NAME, 3);
+            const request = indexedDB.open(DB_NAME, db_version);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                if (!db.indexNames.contains('timestamp')) {db.createIndex('timestamp', 'timestamp', { unique: false });
+                // 1. 建立 ObjectStore (如果不存在)
+                    let store;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                    } else {
+                        store = e.target.transaction.objectStore(STORE_NAME);
+                    }
+    
+                    // 2. 💡 關鍵：檢查並建立索引
+                    // 這樣即便 Store 存在但索引遺失，也能補回來
+                    if (!store.indexNames.contains('timestamp')) {
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        console.log("✅ 索引 'timestamp' 已重建");
+                    }
                 }
             };
             request.onsuccess = (e) => { db = e.target.result; resolve(); };
