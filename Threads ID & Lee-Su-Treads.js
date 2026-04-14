@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.6.5
+// @version       0.4.6.6
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -53,6 +53,8 @@
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                if (!db.indexNames.contains('timestamp')) {db.createIndex('timestamp', 'timestamp', { unique: false });
+                }
             };
             request.onsuccess = (e) => { db = e.target.result; resolve(); };
         });
