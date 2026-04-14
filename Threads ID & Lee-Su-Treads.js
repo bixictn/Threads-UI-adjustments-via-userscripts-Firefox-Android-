@@ -50,25 +50,21 @@
     // --- 2. 工具函式 ---
     const initDB = () => {
         return new Promise((resolve) => {
-            const request = indexedDB.open(DB_NAME, db_version);
-            request.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                // 1. 建立 ObjectStore (如果不存在)
-                    let store;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                    } else {
-                        store = e.target.transaction.objectStore(STORE_NAME);
-                    }
-    
-                    // 2. 💡 關鍵：檢查並建立索引
-                    // 這樣即便 Store 存在但索引遺失，也能補回來
-                    if (!store.indexNames.contains('timestamp')) {
-                        store.createIndex('timestamp', 'timestamp', { unique: false });
-                        console.log("✅ 索引 'timestamp' 已重建");
-                    }
+        const request = indexedDB.open(DB_NAME, db_version);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+                let store;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                } else {
+                    store = e.target.transaction.objectStore(STORE_NAME);
                 }
-            };
+
+                if (!store.indexNames.contains('timestamp')) {
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                    console.log("✅ 索引 'timestamp' 已重建");
+                }
+            }
             request.onsuccess = (e) => { db = e.target.result; resolve(); };
         });
     };
