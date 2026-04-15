@@ -15,6 +15,7 @@
     const STORE_NAME = 'profilecache';
     const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
     let db;
+    const db_version=1;
 
     // --- 1. Fetch 攔截器 ---
     const originalFetch = window.fetch;
@@ -49,7 +50,7 @@
     // --- 2. 工具函式 ---
     const initDB = () => {
         return new Promise((resolve) => {
-            const request = indexedDB.open(DB_NAME, 3);
+            const request = indexedDB.open(DB_NAME, db_version);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
