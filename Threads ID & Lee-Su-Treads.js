@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.6.6
+// @version       0.4.6.8
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -15,7 +15,6 @@
     const STORE_NAME = 'profilecache';
     const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
     let db;
-    const db_version=1;
 
     // --- 1. Fetch 攔截器 ---
     const originalFetch = window.fetch;
@@ -50,21 +49,13 @@
     // --- 2. 工具函式 ---
     const initDB = () => {
         return new Promise((resolve) => {
-        const request = indexedDB.open(DB_NAME, db_version);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-                let store;
-                if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                } else {
-                    store = e.target.transaction.objectStore(STORE_NAME);
+            const request = indexedDB.open(DB_NAME, 3);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                if (!db.indexNames.contains('timestamp')) {db.createIndex('timestamp', 'timestamp', { unique: false });
                 }
-
-                if (!store.indexNames.contains('timestamp')) {
-                    store.createIndex('timestamp', 'timestamp', { unique: false });
-                    console.log("✅ 索引 'timestamp' 已重建");
-                }
-            }
+            };
             request.onsuccess = (e) => { db = e.target.result; resolve(); };
         });
     };
@@ -196,13 +187,61 @@
         const now = Date.now();
         const joinedTs = getTimestampFromMonth(data.joined);
         const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
-
+        let nTs='70px';
         // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
         if (joinedTs > 0 && (now - joinedTs) < TWO_MONTHS) {
             display += "\n✨[新帳號]";
+            nTs='80px';
         }
         container.classList.add("cake-avatar-anchor");
         container.setAttribute('data-cake-date', display);
+
+        if (!container.querySelector('.cake-ig-link')) {
+            const igLink = document.createElement('a');
+            igLink.className = 'cake-ig-link';
+            igLink.href = `https://www.instagram.com/${data.userId}/`;
+            igLink.target = '_blank';
+            igLink.innerText = '📸 IG';
+
+            igLink.style.cssText = `
+        position: absolute;
+        top: ${nTs};
+        left: 50%;
+        transform: translateX(-50%); /* 水平居中 */
+        font-size: 12px;
+        z-index: 1000 !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        text-decoration: none;
+        padding: 2px 2px;
+        border-radius: 5px;
+        background: rgba(128, 128, 128, 0.1);
+        color: #A0A0A0;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+    `;
+
+            // 💡 懸停效果：變彩色並加邊框
+            igLink.onmouseenter = () => {
+                igLink.style.background = 'rgba(214, 41, 118, 0.1)';
+                igLink.style.color = '#E1306C';
+                igLink.style.borderColor = 'rgba(214, 41, 118, 0.3)';
+                igLink.style.transform = 'translateX(-50%) scale(1.1)';
+            };
+            igLink.onmouseleave = () => {
+                igLink.style.background = 'rgba(128, 128, 128, 0.1)';
+                igLink.style.color = '#A0A0A0';
+                igLink.style.borderColor = 'transparent';
+                igLink.style.transform = 'translateX(-50%) scale(1)';
+            };
+
+            // 阻斷冒泡
+            igLink.onclick = (e) => e.stopPropagation();
+            igLink.onmousedown = (e) => e.stopPropagation();
+
+            container.appendChild(igLink);
+        }
         if (!isStale) img.dataset.processed = "done";
     }
 
@@ -246,5 +285,7 @@
             setInterval(doSmartSync, 1000); // 1秒一次，穩定掃描
             doSmartSync();
         }, 2500);
+    }).catch(err => {
+        console.error("❌ 腳本啟動失敗，IndexedDB 無法就緒:", err);
     });
 })();
