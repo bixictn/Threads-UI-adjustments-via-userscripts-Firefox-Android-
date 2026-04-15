@@ -11,6 +11,7 @@
 (function() {
     'use strict';
     const version='v0.2.8';
+    const db_version=1;
     // 判斷當寬度小於高度時（直向螢幕/手機模式），開啟水平居中校正
     let modeadd = (window.innerWidth < window.innerHeight)
               ? "transform: translateX(-50%) !important;"
@@ -127,7 +128,7 @@
     const locFix = {"台灣":"🇹🇼 台灣","香港":"🇭🇰 香港","澳門":"🇲🇴 澳門","中國":"🇨🇳 中國","日本":"🇯🇵 日本","韓國":"🇰🇷 韓國","美國":"🇺🇸 美國","加拿大":"🇨🇦 加拿大","澳洲":"🇦🇺 澳洲","英國":"🇬🇧 英國"};
 
     const getDB = () => new Promise(res => {
-        const req = indexedDB.open(DB_NAME, 3);
+        const req = indexedDB.open(DB_NAME, db_version);
         req.onsuccess = () => res(req.result);
         req.onerror = () => console.error("DB Open Error");
     });
