@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.6.8
+// @version       0.4.7.0
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -49,15 +49,35 @@
 
     // --- 2. 工具函式 ---
     const initDB = () => {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, db_version);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                if (!db.indexNames.contains('timestamp')) {db.createIndex('timestamp', 'timestamp', { unique: false });
+               let store;
+
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    store = db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                } else {
+                    store = e.target.transaction.objectStore(STORE_NAME);
+                }
+
+                // 2. 💡 修正處：從 store (而非 db) 檢查並建立索引
+                if (!store.indexNames.contains('timestamp')) {
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                    console.log("✅ 已成功建立 timestamp 索引");
                 }
             };
-            request.onsuccess = (e) => { db = e.target.result; resolve(); };
+
+            request.onsuccess = (e) => {
+                db = e.target.result;
+                console.log("🟢 IndexedDB 已連線");
+                resolve();
+            };
+
+            request.onerror = (e) => {
+                console.error("🔴 DB 開啟失敗:", e.target.error);
+                reject(e.target.error);
+            };
         });
     };
 
