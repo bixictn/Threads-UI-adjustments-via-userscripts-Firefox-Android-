@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.8
+// @version      0.2.8.1
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -11,7 +11,6 @@
 (function() {
     'use strict';
     const version='v0.2.8';
-    const db_versin=1;
     // 判斷當寬度小於高度時（直向螢幕/手機模式），開啟水平居中校正
     let modeadd = (window.innerWidth < window.innerHeight)
               ? "transform: translateX(-50%) !important;"
@@ -128,29 +127,65 @@
     const locFix = {"台灣":"🇹🇼 台灣","香港":"🇭🇰 香港","澳門":"🇲🇴 澳門","中國":"🇨🇳 中國","日本":"🇯🇵 日本","韓國":"🇰🇷 韓國","美國":"🇺🇸 美國","加拿大":"🇨🇦 加拿大","澳洲":"🇦🇺 澳洲","英國":"🇬🇧 英國"};
 
     const getDB = () => new Promise(res => {
-        const req = indexedDB.open(DB_NAME, db_version);
+        const req = indexedDB.open(DB_NAME, 3);
         req.onsuccess = () => res(req.result);
         req.onerror = () => console.error("DB Open Error");
     });
 
     const getStats = async () => {
-        const db = await getDB();
-        if (!db.objectStoreNames.contains(STORE_NAME)) return { count: 0, latest: [] };
-        return new Promise(res => {
-            const tx = db.transaction([STORE_NAME], 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const index = store.indexNames.contains('timestamp') ? store.index('timestamp') : store;
-            const countReq = store.count();
-            countReq.onsuccess = () => {
-                const count = countReq.result;
-                const latest = [];
-                index.openCursor(null, 'prev').onsuccess = e => {
-                    const cursor = e.target.result;
-                    if (cursor && latest.length < 20) { latest.push(cursor.value); cursor.continue(); }
-                    else { res({ count, latest }); }
+        try {
+            const db = await getDB(); // 這裡如果 getDB 失敗會被 catch 捕獲
+
+            // 1. 檢查 Store 是否存在
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                console.warn(`⚠️ 找不到 Store: ${STORE_NAME}`);
+                return { count: 0, latest: [] };
+            }
+
+            return new Promise((res, rej) => {
+                // 2. 建立交易，並加上 Transaction 級別的錯誤監聽
+                const tx = db.transaction([STORE_NAME], 'readonly');
+
+                tx.onerror = (e) => {
+                    console.error("🔴 Transaction 交易失敗:", e.target.error);
+                    rej(e.target.error);
                 };
-            };
-        });
+
+                const store = tx.objectStore(STORE_NAME);
+                const index = store.indexNames.contains('timestamp') ? store.index('timestamp') : store;
+
+                // 3. Count 請求
+                const countReq = store.count();
+                countReq.onerror = (e) => console.error("❌ Count 請求失敗:", e.target.error);
+
+                countReq.onsuccess = () => {
+                    const count = countReq.result;
+                    const latest = [];
+
+                    // 4. Cursor 請求
+                    const cursorReq = index.openCursor(null, 'prev');
+
+                    cursorReq.onerror = (e) => {
+                        console.error("❌ Cursor 讀取失敗:", e.target.error);
+                        res({ count, latest: [] }); // 即使讀取清單失敗，至少回傳數量
+                    };
+
+                    cursorReq.onsuccess = e => {
+                        const cursor = e.target.result;
+                        if (cursor && latest.length < 20) {
+                            latest.push(cursor.value);
+                            cursor.continue();
+                        } else {
+                            res({ count, latest });
+                        }
+                    };
+                };
+            });
+        } catch (err) {
+            // 5. 捕獲 await getDB() 或其他同步代碼產生的錯誤
+            console.error("🔴 getStats 發生嚴重錯誤:", err);
+            return { count: 0, latest: [] }; // 回傳空值防止 UI 報錯
+        }
     };
 
     // --- 強力捲動鎖定函數 ---
