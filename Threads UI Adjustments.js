@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.4
+// @version      0.9.7.5
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -48,7 +48,6 @@
             box-shadow: 0 0 15px rgba(212, 175, 55, 0.6) !important;
         }
 
-        /* --- 導覽列 Active 狀態 (需求 2) --- */
         a[data-active="true"] svg,
         div[role="button"][data-active="true"] svg {
             color: #D4AF37 !important;
@@ -118,20 +117,19 @@
     `;
     (document.head || document.documentElement).appendChild(style);
 
-    // 建立黑幕與沙漏 DOM
     const blackoutDiv = document.createElement('div');
     blackoutDiv.id = 'ultimate-blackout';
     blackoutDiv.innerHTML = '<div id="aligntime">⏳</div>';
     (document.body || document.documentElement).appendChild(blackoutDiv);
 
     function showBlackout() {
-        blackoutDiv.style.display = 'flex'; // 啟動居中佈局
+        blackoutDiv.style.display = 'flex'; 
     }
 
     function hideBlackout() {
         const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
         if (pageZero) {
-            void pageZero.offsetHeight; // 強制重繪
+            void pageZero.offsetHeight; 
             pageZero.style.setProperty('opacity', '1', 'important');
         }
         blackoutDiv.style.display = 'none';
@@ -200,7 +198,7 @@
     }
 
     function isNestedPost(el) {
-        // 如果 el 本身是容器，且它的子層也有容器，那它就是文中文
+        // 如果 el 本身是容器，且它的子層也有容器，文章有引文
         return el.matches('[data-pressable-container="true"]') &&
             el.querySelector('[data-pressable-container="true"]');
     }
@@ -270,7 +268,7 @@
 
             if(nestedpost === 1 ){//有引文
 
-                let checkdiv = post.querySelector('[data-pressable-container="true"]').parentElement;//單有引文父層只為<div>
+                let checkdiv = post.querySelector('[data-pressable-container="true"]').parentElement;//單有引文父層為<div>
 
                 if(lines.length===0 && checkdiv.className != ''){//無線
                     const anchors = post.querySelectorAll('[dir="auto"]');
@@ -288,7 +286,7 @@
 
                                     toTop(index);
 
-                                    hideBlackout(); // 完成，關閉黑幕
+                                    hideBlackout(); 
                                     return;
                                 }
                             }
@@ -331,7 +329,7 @@
 
                                     toTop(index);
 
-                                    hideBlackout(); // 完成，關閉黑幕
+                                    hideBlackout(); 
                                     return;
                                 }
                             }
@@ -362,7 +360,7 @@
             else {
                 setTimeout(() => {
                     isBackAction = false;
-                }, 100); // 縮短延遲，只要能蓋過排版跳動即可
+                }, 100); 
             }
         }
     }
@@ -423,6 +421,10 @@
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
+        if (isBackAction) {
+            lastPath = currentPath;
+            return;
+        }
 
         if (currentPath.includes('/post/') && !currentPath.includes('/media')) {
             if (lastPath !== currentPath) {
@@ -432,7 +434,7 @@
                     pageZero.removeAttribute('data-processed');
                     pageZero.style.setProperty('opacity', '0', 'important');
                 }
-                showBlackout(); // 顯示黑幕
+                showBlackout(); 
             }
             handlePostPageIndent();
         } else {
@@ -451,10 +453,37 @@
     const observer = new MutationObserver(mainLoop);
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
+    let scrollHistory = {};
+
+    window.addEventListener('scroll', () => {
+        if (!isBackAction) {
+            scrollHistory[window.location.pathname] = window.scrollY;
+        }
+    }, { passive: true });
+
+    // 2. 監聽返回動作，強行恢復位置
     window.addEventListener('popstate', () => {
-        isBackAction = true;
-        setTimeout(() => {
-            mainLoop();
-        }, 0);
+        const targetPath = window.location.pathname;
+        const savedPos = scrollHistory[targetPath];
+
+        if (savedPos !== undefined) {
+            isBackAction = true;
+            showBlackout();
+
+            let attempts = 0;
+            const recoverScroll = setInterval(() => {
+                window.scrollTo(0, savedPos);
+                attempts++;
+
+                // 嘗試多次，直到 Threads 渲染完成或是嘗試過久
+                if (attempts > 30 || Math.abs(window.scrollY - savedPos) < 2) {
+                    clearInterval(recoverScroll);
+                    setTimeout(() => {
+                        hideBlackout();
+                        isBackAction = false;
+                    }, 200);
+                }
+            }, 30);
+        }
     });
 })();
