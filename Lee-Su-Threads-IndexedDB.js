@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.8.1
+// @version      0.2.8.2
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -12,6 +12,7 @@
     'use strict';
     const version='v0.2.8';
     const db_version=1;
+    const ZIpanel=3,ZIbtn=4,ZIpgb=2;
     // 判斷當寬度小於高度時（直向螢幕/手機模式），開啟水平居中校正
     let modeadd = (window.innerWidth < window.innerHeight)
               ? "transform: translateX(-50%) !important;"
@@ -26,7 +27,7 @@
             left: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            z-index: 1147483645 !important;
+            z-index: ${ZIpgb} !important;
             backdrop-filter: blur(2px);
             transition: opacity 0.2s;
         }
@@ -271,7 +272,7 @@
             width: 80% !important;
             border-radius: 16px !important;
             padding: 20px !important;
-            z-index: 1147483646 !important;
+            z-index: ${ZIpanel} !important;
             animation: panelFadeIn 0.2s ease-out;
             touch-action: auto;
         `;
@@ -405,7 +406,7 @@
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
             btn.innerHTML = '📊';
-            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:1147483647!important;backdrop-filter:blur(4px);`;
+            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:${ZIbtn} !important;backdrop-filter:blur(4px);`;
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
         } else {
