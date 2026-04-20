@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.3
+// @version      0.9.7.4
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -14,7 +14,7 @@
 
     let lastPath = "";
     let isBackAction = false;
-
+    const ZIdialog=7,ZIbg=5;
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
@@ -32,6 +32,10 @@
             cursor: pointer !important;
             fill: #D4AF37 !important;
             transition: transform 0.2s ease !important;
+        }
+
+        div[class*="-mode"] {
+            z-index:${ZIdialog} !important;
         }
 
         /* 點擊時的縮放效果 */
@@ -77,7 +81,7 @@
             inset: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            z-index: 2147483647 !important;
+            z-index: ${ZIbg} !important;
             display: none;
 
             /* --- 毛玻璃核心設定 --- */
@@ -201,7 +205,7 @@
             el.querySelector('[data-pressable-container="true"]');
     }
 
-    function handleMainPageindent(){
+    function handleMainPageindent(){//主頁
         const posts = document.querySelectorAll('[data-pressable-container="true"]');
         if (!posts) return;
         for (const [index, post] of posts.entries()) {
@@ -213,7 +217,7 @@
         }
     }
 
-    function handleInPostPageIndent(inpost){
+    function handleInPostPageIndent(inpost){//引文
         const anchors = inpost.querySelectorAll('[dir="auto"]');
         let check=0;
         for(const [index,anchor] of anchors.entries()){
@@ -227,7 +231,7 @@
         }
     }
 
-    function handleAllInPostPageIndent(){
+    function handleAllInPostPageIndent(){//所有文章檢查引文
         const pages = document.querySelectorAll('[data-pagelet*="threads_post_page"]');
         for (const [index, page] of pages.entries()) {
             const posts=page.querySelectorAll('[data-pressable-container="true"]');
@@ -355,6 +359,11 @@
                     }, delay);
                 });
             }
+            else {
+                setTimeout(() => {
+                    isBackAction = false;
+                }, 100); // 縮短延遲，只要能蓋過排版跳動即可
+            }
         }
     }
 
@@ -444,7 +453,8 @@
 
     window.addEventListener('popstate', () => {
         isBackAction = true;
-        // 1秒後重置，因為排版修正通常發生在切換後的幾百毫秒內
-        setTimeout(() => { isBackAction = false; }, 1000);
+        setTimeout(() => {
+            mainLoop();
+        }, 0);
     });
 })();
