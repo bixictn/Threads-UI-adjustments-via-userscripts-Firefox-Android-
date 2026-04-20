@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Threads ID & Lee-Su-Threads
-// @version       0.4.7.0
+// @version       0.4.7.1
 // @description   Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -104,7 +104,6 @@
             if (userLink) {
                 const href = userLink.getAttribute('href').split('?')[0];
                 userId = href.replace(/^\/@?/, '').split('/')[0];
-                console.log("ID:", userId);
             }
             if (!userLink) continue;
 
@@ -131,7 +130,7 @@
             const container = img.parentElement?.parentElement;
             if (container && container.getAttribute('data-cake-date') === "⏳" && badge) {
                 const lastClick = parseInt(badge.dataset.lastClickTime || 0);
-                if (now - lastClick > 5000) {
+                if (now - lastClick > 5000 && isInViewport(scope)) {
                     delete badge.dataset.cakeClicked;
                     delete badge.dataset.cakeStatus;
                     console.log(`[🔄] ${userId} 取資料中...`);
