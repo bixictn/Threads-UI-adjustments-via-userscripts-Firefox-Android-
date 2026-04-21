@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.5
+// @version      0.9.7.6
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -14,6 +14,8 @@
 
     let lastPath = "";
     let isBackAction = false;
+    let targetScrollY = 0;
+    let scrollLockActive = false;
     const ZIdialog=7,ZIbg=5;
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
@@ -23,6 +25,10 @@
         /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
+
+        a[aria-label="為你推薦"] {
+            opacity: 0 !important;
+        }
 
         /* 深色模式 & 亮色模式通用：針對 Threads Logo SVG 進行處理 */
         .__fb-dark-mode a[href="/"] svg[aria-label="Threads"],
@@ -34,7 +40,7 @@
             transition: transform 0.2s ease !important;
         }
 
-        div[class*="-mode"] {
+        div[class*="-mode"]{
             z-index:${ZIdialog} !important;
         }
 
@@ -347,7 +353,8 @@
     function toTop(index){
 
         if (index === 0) {
-            if (!isBackAction) {
+            if (!isBackAction && !scrollLockActive) {
+
                 window.scrollTo({ top: 0, behavior: 'instant' });
                 [0, 50, 150, 300].forEach(delay => {
                     setTimeout(() => {
@@ -357,11 +364,7 @@
                     }, delay);
                 });
             }
-            else {
-                setTimeout(() => {
-                    isBackAction = false;
-                }, 100); 
-            }
+            
         }
     }
 
@@ -421,27 +424,32 @@
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
-        if (isBackAction) {
-            lastPath = currentPath;
-            return;
-        }
 
-        if (currentPath.includes('/post/') && !currentPath.includes('/media')) {
-            if (lastPath !== currentPath) {
-                lastPath = currentPath;
-                const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
-                if (pageZero) {
-                    pageZero.removeAttribute('data-processed');
-                    pageZero.style.setProperty('opacity', '0', 'important');
-                }
-                showBlackout(); 
-            }
-            handlePostPageIndent();
-        } else {
-            handleMainPageindent();
+    // 1. 路徑變更偵測
+    if (lastPath !== currentPath) {
+        if (isBackAction) {
+            // 如果是返回動作，只更新路徑紀錄，不准執行任何重置或捲動
             lastPath = currentPath;
-            hideBlackout();
+        } else {
+            // 只有「主動點擊進入」才執行的重置
+            lastPath = currentPath;
+            const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
+            if (pageZero) {
+                pageZero.removeAttribute('data-processed');
+                pageZero.style.setProperty('opacity', '0', 'important');
+            }
+            showBlackout();
         }
+    }
+
+    // 2. 執行縮排處理（不論進入還是返回都要排版，但 handlePostPageIndent 內部不准再 scrollTo）
+    if (currentPath.includes('/post/')) {
+        handlePostPageIndent();
+    } else {
+        handleMainPageindent();
+        // 如果是返回主首頁，且黑幕還開著，就關掉它
+        if (!isBackAction) hideBlackout();
+    }
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
@@ -452,17 +460,20 @@
 
     const observer = new MutationObserver(mainLoop);
     observer.observe(document.documentElement, { childList: true, subtree: true });
-
     let scrollHistory = {};
 
+    // 1. 隨時記錄每個路徑的捲軸位置
     window.addEventListener('scroll', () => {
         if (!isBackAction) {
             scrollHistory[window.location.pathname] = window.scrollY;
         }
     }, { passive: true });
 
-    // 2. 監聽返回動作，強行恢復位置
+
     window.addEventListener('popstate', () => {
+        const currentPath = window.location.pathname;
+        if ( lastPath === currentPath) return;
+
         const targetPath = window.location.pathname;
         const savedPos = scrollHistory[targetPath];
 
@@ -470,6 +481,14 @@
             isBackAction = true;
             showBlackout();
 
+            targetScrollY = window.scrollY;
+            if (targetScrollY < 10) {
+                isBackAction = false; // 如果在頂端，直接釋放
+                hideBlackout();
+                return;
+            }
+
+            scrollLockActive = true;
             let attempts = 0;
             const recoverScroll = setInterval(() => {
                 window.scrollTo(0, savedPos);
@@ -483,7 +502,7 @@
                         isBackAction = false;
                     }, 200);
                 }
-            }, 30);
+            }, 30); // 每 30ms 強制校正一次位置
         }
     });
 })();
