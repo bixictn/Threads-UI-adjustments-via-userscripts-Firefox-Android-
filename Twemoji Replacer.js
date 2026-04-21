@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Twemoji Replacer
-// @version       0.9.0
+// @version       0.9.2
 // @description   Twemoji Replacer
 // @author        Gemini
 // @match         https://*/*
@@ -20,7 +20,8 @@
     const STORE_NAME = "svg_data";
     const NF_MARK = "NF";
 
-    const EMOJI_REGEX = /([\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}](\u{FE0F}?\u{200D}\u{FE0F}?[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}])*[\u{1F3FB}-\u{1F3FF}]?|(\u{1F1E6}-\u{1F1FF}){2})/gu;
+    // 強化 ZWJ (200d) 和變體符號 (fe0f) 的連貫性抓取
+    const EMOJI_REGEX = /([\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}](\u{200D}[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{2100}-\u{2BFF}]\u{FE0F}?)*[\u{1F3FB}-\u{1F3FF}]?|(\u{1F1E6}-\u{1F1FF}){2}|[\u{2100}-\u{2BFF}]\u{FE0F}?)/gu;
 
     let db = null;
     let isInit = false;
@@ -29,16 +30,37 @@
         const r = []; let c = 0, p = 0, i = 0;
         while (i < unicode.length) {
             c = unicode.charCodeAt(i++);
-            if (p) { r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16)); p = 0; }
-            else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
+            if (p) {
+                r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16));
+                p = 0;
+            } else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
             else { r.push(c.toString(16)); }
         }
+
+        const last = r[r.length - 1];
+        // 這些是 Twemoji 規範中「單獨出現也必須帶 fe0f」的清單
+        const forceFE0F = ['2194', '2195', '2640', '2642', '26a0', '2139'];
+
+        // 1. 處理組合 (如 🙂‍↕️ 成功合體的情況)
         if (r.includes('200d')) {
-            const last = r[r.length - 1];
-            if ((last === '2642' || last === '2640') && !r.includes('fe0f')) r.push('fe0f');
-            return r.join('-');
+            if (forceFE0F.includes(last) && !r.includes('fe0f')) r.push('fe0f');
+            const res = r.join('-');
+            console.log(`[🧩 組合成功] Emoji: ${unicode} | 代碼: ${res}`);
+            return res;
         }
-        return r.filter(x => x !== 'fe0f').join('-');
+
+        // 2. 處理單圖 (如 ↕️ 真的單獨出現的情況)
+        if (forceFE0F.includes(last)) {
+            if (!r.includes('fe0f')) r.push('fe0f');
+            const res = r.join('-');
+            console.log(`[🛡️ 單圖保險] Emoji: ${unicode} | 代碼: ${res}`);
+            return res;
+        }
+
+        // 3. 一般單圖 (如 🙂)
+        const res = r.filter(x => x !== 'fe0f').join('-');
+        console.log(`[😀 一般單圖] Emoji: ${unicode} | 代碼: ${res}`);
+        return res;
     }
 
     async function initDB() {
