@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.8.2
+// @version      0.2.8.3
 // @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -20,103 +20,151 @@
     //css
     const style = document.createElement('style');
     style.textContent = `
-    /* 遮罩層：阻斷所有底層點擊 */
-        #threads-idb-overlay {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            z-index: ${ZIpgb} !important;
-            backdrop-filter: blur(2px);
-            transition: opacity 0.2s;
-        }
-        .__fb-dark-mode #threads-idb-overlay { background: rgba(0,0,0,0.6) !important; }
-        .__fb-light-mode #threads-idb-overlay { background: rgba(255,255,255,0.4) !important; }
+		/* 遮罩層：阻斷所有底層點擊 */
 
-        /* --- 1. 深色模式樣式 (預設) --- */
-        .__fb-dark-mode #threads-idb-data-panel {
-            background: #101010 !important;
-            border: 2px solid #D4AF37 !important;
-            color: #FFFFFF !important;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.9) !important;
-        }
-        .__fb-dark-mode #threads-idb-mini-btn {
-            background-color: rgba(16,16,16,0.9) !important;
-            border: 1.5px solid #D4AF37 !important;
-            color: #D4AF37 !important;
-        }
+		#threads-idb-data-panel{
+			position: fixed !important;
+			top: 5% !important;
+			left: 5% !important;
+			transform-origin: top center !important;
+			width: 90% !important;
+            height: 85% !important;
+			border-radius: 16px !important;
+			padding: 20px !important;
+			z-index: ${ZIpanel} !important;
+			animation: panelFadeIn 0.2s ease-out;
+			touch-action: auto;
+		}
 
-        /* --- 2. 亮色模式樣式 --- */
-        .__fb-light-mode #threads-idb-data-panel {
-            background: #FFFFFF !important;
-            border: 2px solid #D4AF37 !important;
-            color: #000000 !important;
-            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
-        }
-        .__fb-light-mode #threads-idb-mini-btn {
-            background-color: rgba(250, 250, 250, 0.9) !important;
-            border: 1.5px solid #D4AF37 !important;
-            color: #000000 !important;
-            box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
-        }
+		@media screen and (max-width: 695px) {
+			#threads-idb-data-panel {
+				top: 32px !important;
+				left: 2% !important;
+			}
+		}
 
-        /* 暗色模式下的清單項目微調 */
-        .__fb-dark-mode #idb-list-content > div {
-            background-color: rgba(16,16,16,0.9) !important;
-            border: 2px solid #D4AF37 !important;
-            border-left: 3px solid #8f7213 !important;
-        }
-        .__fb-dark-mode #idb-list-content a {
-            color: #D4AF37 !important;
-        }
+		/* 預設為桌面版樣式 */
+		#threads-idb-mini-btn {
+			top: 55px !important;
+			left: 20px !important;
+			width: 24px !important;
+			height: 24px !important;
+			position:fixed!important;
+			border-radius:50%!important;
+			display:flex!important;
+			align-items:center!important;
+			justify-content:center!important;
+			font-size:18px!important;
+			cursor:pointer!important;
+			z-index:${ZIbtn} !important;
+			backdrop-filter:blur(4px);
+		}
+
+		/* 當螢幕寬度小於 695px 時（自動判定為行動版） */
+		@media screen and (max-width: 695px) {
+			#threads-idb-mini-btn {
+				top: 14px !important;
+				left: 25% !important;
+				width: 32px !important;
+				height: 32px !important;
+			}
+		}
+
+		#threads-idb-overlay {
+			position: fixed !important;
+			top: 0 !important;
+			left: 0 !important;
+			width: 100vw !important;
+			height: 100vh !important;
+			z-index: ${ZIpgb} !important;
+			backdrop-filter: blur(2px);
+			transition: opacity 0.2s;
+		}
+		.__fb-dark-mode #threads-idb-overlay { background: rgba(0,0,0,0.6) !important; }
+		.__fb-light-mode #threads-idb-overlay { background: rgba(255,255,255,0.4) !important; }
+
+		/* --- 1. 深色模式樣式 (預設) --- */
+		.__fb-dark-mode #threads-idb-data-panel {
+			background: #101010 !important;
+			border: 2px solid #D4AF37 !important;
+			color: #FFFFFF !important;
+			box-shadow: 0 15px 50px rgba(0,0,0,0.9) !important;
+		}
+		.__fb-dark-mode #threads-idb-mini-btn {
+			background-color: rgba(16,16,16,0.9) !important;
+			border: 1.5px solid #D4AF37 !important;
+			color: #D4AF37 !important;
+		}
+
+		/* --- 2. 亮色模式樣式 --- */
+		.__fb-light-mode #threads-idb-data-panel {
+			background: #FFFFFF !important;
+			border: 2px solid #D4AF37 !important;
+			color: #000000 !important;
+			box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
+		}
+		.__fb-light-mode #threads-idb-mini-btn {
+			background-color: rgba(250, 250, 250, 0.9) !important;
+			border: 1.5px solid #D4AF37 !important;
+			color: #000000 !important;
+			box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
+		}
+
+		/* 暗色模式下的清單項目微調 */
+		.__fb-dark-mode #idb-list-content > div {
+			background-color: rgba(16,16,16,0.9) !important;
+			border: 2px solid #D4AF37 !important;
+			border-left: 3px solid #8f7213 !important;
+		}
+		.__fb-dark-mode #idb-list-content a {
+			color: #D4AF37 !important;
+		}
 
 
-        /* 亮色模式下的清單項目微調 */
-        .__fb-light-mode #idb-list-content > div {
-            background: #f5f5f5 !important;
-            border: 1px solid #ddd !important;
-            border-left: 3px solid #D4AF37 !important;
-        }
-        .__fb-light-mode #idb-list-content a {
-            color: #0056b3 !important;
-        }
+		/* 亮色模式下的清單項目微調 */
+		.__fb-light-mode #idb-list-content > div {
+			background: #f5f5f5 !important;
+			border: 1px solid #ddd !important;
+			border-left: 3px solid #D4AF37 !important;
+		}
+		.__fb-light-mode #idb-list-content a {
+			color: #0056b3 !important;
+		}
 
-        .__fb-dark-mode #btn-export, .__fb-dark-mode #btn-import-std {
-            padding:8px;
-            background:#222;
-            color:#D4AF37;
-            border:1px solid #D4AF37;
-            border-radius:6px;
-            cursor:pointer;
-            font-size:11px;
-        }
+		.__fb-dark-mode #btn-export, .__fb-dark-mode #btn-import-std {
+			padding:8px;
+			background:#222;
+			color:#D4AF37;
+			border:1px solid #D4AF37;
+			border-radius:6px;
+			cursor:pointer;
+			font-size:11px;
+		}
 
-         .__fb-dark-mode #btn-import-addon {
-                padding:10px;
-                background:#D4AF37;
-                color:#000;
-                border:none;
-                border-radius:6px;
-                cursor:pointer;
-                font-size:11px;
-                font-weight:bold;
-                grid-column:span 2;
-           }
+		.__fb-dark-mode #btn-import-addon {
+				padding:10px;
+				background:#D4AF37;
+				color:#000;
+				border:none;
+				border-radius:6px;
+				cursor:pointer;
+				font-size:11px;
+				font-weight:bold;
+				grid-column:span 2;
+		}
 
-        .__fb-light-mode #btn-export, .__fb-light-mode #btn-import-std {
-            background: #eee !important;
-            color: #333 !important;
-            border: 1px solid #ccc !important;
-        }
-        .__fb-light-mode #btn-import-addon {
-            background: #D4AF37 !important;
-            color: #fff !important;
-        }
-        a[href="/"] svg[aria-label="Threads"] path {
-            fill: #D4AF37 !important;
-        }
-}
+		.__fb-light-mode #btn-export, .__fb-light-mode #btn-import-std {
+			background: #eee !important;
+			color: #333 !important;
+			border: 1px solid #ccc !important;
+		}
+		.__fb-light-mode #btn-import-addon {
+			background: #D4AF37 !important;
+			color: #fff !important;
+		}
+		a[href="/"] svg[aria-label="Threads"] path {
+			fill: #D4AF37 !important;
+		}
     `;
     document.head.appendChild(style);
 
@@ -136,7 +184,7 @@
 
     const getStats = async () => {
         try {
-            const db = await getDB(); // 這裡如果 getDB 失敗會被 catch 捕獲
+            const db = await getDB();
 
             // 1. 檢查 Store 是否存在
             if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -264,18 +312,7 @@
 
         panel = document.createElement('div');
         panel.id = 'threads-idb-data-panel';
-        panel.style.cssText = `
-            position: fixed !important;
-            top: 30px !important;
-            left: ${targetLeft} !important;${modeadd}
-            transform-origin: top center !important;
-            width: 80% !important;
-            border-radius: 16px !important;
-            padding: 20px !important;
-            z-index: ${ZIpanel} !important;
-            animation: panelFadeIn 0.2s ease-out;
-            touch-action: auto;
-        `;
+
 
         if (!document.getElementById('panel-anim')) {
             const s = document.createElement('style');
@@ -406,7 +443,7 @@
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
             btn.innerHTML = '📊';
-            btn.style.cssText = `position:fixed!important;top:14px!important;left:70px!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:${ZIbtn} !important;backdrop-filter:blur(4px);`;
+            //btn.style.cssText = `position:fixed!important;top:14px!important;left:20%!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:${ZIbtn} !important;backdrop-filter:blur(4px);`;
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
         } else {
