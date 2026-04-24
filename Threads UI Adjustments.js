@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.6
+// @version      0.9.7.8
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -16,18 +16,24 @@
     let isBackAction = false;
     let targetScrollY = 0;
     let scrollLockActive = false;
-    const ZIdialog=7,ZIbg=5;
+    const ZImenu=8,ZIdialog=7,ZIbg=5;
+    let scrollHistory = {}, replylist=[];
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
+
         [data-pagelet="threads_post_page_0"] { opacity: 0 !important; }
 
         /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
 
-        a[aria-label="為你推薦"] {
-            opacity: 0 !important;
+        a[aria-label] span[dir="auto"] {
+            color: #808080 !important;
+        }
+
+        a[aria-label][data-active="true"] span[dir="auto"] {
+            color: #D4AF37 !important;
         }
 
         /* 深色模式 & 亮色模式通用：針對 Threads Logo SVG 進行處理 */
@@ -42,6 +48,10 @@
 
         div[class*="-mode"]{
             z-index:${ZIdialog} !important;
+        }
+
+        div[class*="-mode"] div[style*="transform"]{
+            z-index:${ZImenu} !important;
         }
 
         /* 點擊時的縮放效果 */
@@ -66,9 +76,11 @@
         }
 
         /* 導覽列圖示縮小 (排除主 Logo) */
-        nav svg:not([aria-label="Threads"]) {
-            transform: scale(0.7) !important;
-            transform-origin: center center !important;
+        @media screen and (max-width: 695px){
+            nav svg:not([aria-label="Threads"]) {
+                transform: scale(0.7) !important;
+                transform-origin: center center !important;
+            }
         }
 
         /* 內文放大 */
@@ -312,7 +324,7 @@
 
                         toTop(index);
 
-                        hideBlackout(); // 完成，關閉黑幕
+                        hideBlackout(); 
                         return;
                     }
                 }
@@ -335,7 +347,7 @@
 
                                     toTop(index);
 
-                                    hideBlackout(); 
+                                    hideBlackout();
                                     return;
                                 }
                             }
@@ -356,7 +368,7 @@
             if (!isBackAction && !scrollLockActive) {
 
                 window.scrollTo({ top: 0, behavior: 'instant' });
-                [0, 50, 150, 300].forEach(delay => {
+                [0, 150, 300, 500].forEach(delay => {
                     setTimeout(() => {
                         window.scrollTo(0, 0);
                         document.documentElement.scrollTop = 0;
@@ -364,7 +376,6 @@
                     }, delay);
                 });
             }
-            
         }
     }
 
@@ -392,13 +403,39 @@
     }
 
     function updateNavActiveState() {
+
+
+        const windowWidth = window.innerWidth;
+        if(windowWidth > 695){
+            const firsthtmldiv = document.querySelector('div[class*="html-div"');
+            if(firsthtmldiv){
+                const headerbar=firsthtmldiv.parentElement?.parentElement;
+                headerbar.style.setProperty("width","fit-content","important");
+            }
+        }
+
         const currentPath = window.location.pathname;
         const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
         navLinks.forEach(link => {
+            if(link.getAttribute('aria-label') === '串文'){
+                const about=link.closest('div[class*="html-div"]').parentElement;
+                about.style.setProperty("width", "auto", "important");
+                about.style.setProperty("justify-content", "space-around", "important");
+
+                const mods=about.querySelectorAll('a[href]');
+                for(const mod of mods){
+                    const modp=mod.parentElement;
+                    modp.style.setProperty("padding-inline-start", "2px","important");
+                    modp.style.setProperty("padding-inline-end", "2px","important");
+                }
+            }
+
             const href = link.getAttribute('href');
+            if(!href)return;
+            const hrefnode=href.split('/'),currentPathnode=currentPath.split('/');
             const isActive = (href === currentPath) ||
                   (currentPath === '/' && href === '/') ||
-                  (href && href !== '/' && currentPath.startsWith(href));
+                  (href && href !== '/' && currentPath.startsWith(href) && hrefnode.length===currentPathnode.length);
             if (isActive) {
                 link.setAttribute('data-active', 'true');
             } else {
@@ -420,47 +457,100 @@
         });
     }
 
+    function hrstyle() {
+        const hrs = document.querySelectorAll('hr[class*="html-hr"]');
 
+        if(!hrs)return;
+
+        for(const [index, hr] of hrs.entries()){
+            const hrpp = hr.parentElement?.parentElement;
+
+            const reply = hrpp.querySelector('svg[aria-label=""][role="img"]');
+            if(!reply) continue;
+            if(reply.parentElement?.parentElement.tagName !== 'DIV') continue;
+            const ahref=reply.parentElement?.parentElement.querySelector('a[href]');
+
+            if(ahref)continue;
+
+
+            const hrp = hr.parentElement;
+            hrp.style.setProperty("flex-grow", "1", "important");
+            hrp.style.setProperty("display", "flex", "important");
+
+            const currentPath = window.location.pathname;
+            const currentPathnode = currentPath.split('/');
+            if(!currentPath.includes('/@') && currentPathnode.length==2) hrp.style.setProperty("align-items", "center", "important");
+
+
+            hrpp.style.setProperty("display", "flex", "important");
+            hrpp.style.setProperty("flex-direction", "column", "important");
+            hrobserver.observe(hrpp);
+            updateHrppHeight(hrpp);
+            hrpp.style.setProperty("height", "auto", "important");
+        }
+    }
+
+    function updateHrppHeight(target) {
+
+        const rect = target.getBoundingClientRect();
+        const hasDecimal = rect.top % 1 !== 0; // 如果有餘數，代表有小數
+        if (hasDecimal && rect.top > 0 && rect.top < window.innerHeight && !replylist.includes(target)) {
+            let h = window.innerHeight - rect.top - 20;
+            target.style.setProperty("min-height", `${h}px`, "important");
+            if(h>50) {
+                replylist.push(target);
+                history.pushState({ type: 'reply_open' }, '');
+            }
+        }
+    }
+
+    function closeReplyDialog() {
+        const cancelButton = Array.from(document.querySelectorAll('div[role="button"]'))
+        .find(el => el.innerText === '取消' || el.textContent === '取消');
+
+        if (cancelButton) {
+            cancelButton.click();
+        }
+    }
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
 
-    // 1. 路徑變更偵測
-    if (lastPath !== currentPath) {
-        if (isBackAction) {
-            // 如果是返回動作，只更新路徑紀錄，不准執行任何重置或捲動
-            lastPath = currentPath;
-        } else {
-            // 只有「主動點擊進入」才執行的重置
-            lastPath = currentPath;
-            const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
-            if (pageZero) {
-                pageZero.removeAttribute('data-processed');
-                pageZero.style.setProperty('opacity', '0', 'important');
+        // 1. 路徑變更偵測
+        if (lastPath !== currentPath) {
+            if (isBackAction) {
+                // 如果是返回動作，只更新路徑紀錄，不准執行任何重置或捲動
+                lastPath = currentPath;
+            } else {
+                // 只有「主動點擊進入」才執行的重置
+                lastPath = currentPath;
+                const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
+                if (pageZero) {
+                    pageZero.removeAttribute('data-processed');
+                    pageZero.style.setProperty('opacity', '0', 'important');
+                }
+                showBlackout();
             }
-            showBlackout();
         }
-    }
 
-    // 2. 執行縮排處理（不論進入還是返回都要排版，但 handlePostPageIndent 內部不准再 scrollTo）
-    if (currentPath.includes('/post/')) {
-        handlePostPageIndent();
-    } else {
-        handleMainPageindent();
-        // 如果是返回主首頁，且黑幕還開著，就關掉它
-        if (!isBackAction) hideBlackout();
-    }
+        if (currentPath.includes('/post/')) {
+            handlePostPageIndent();
+        } else {
+            handleMainPageindent();
+            if (!isBackAction) hideBlackout();
+        }
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
         updateNavActiveState();
 
         cleanContent();
+        hrstyle();
     }
 
     const observer = new MutationObserver(mainLoop);
     observer.observe(document.documentElement, { childList: true, subtree: true });
-    let scrollHistory = {};
+
 
     // 1. 隨時記錄每個路徑的捲軸位置
     window.addEventListener('scroll', () => {
@@ -472,7 +562,10 @@
 
     window.addEventListener('popstate', () => {
         const currentPath = window.location.pathname;
-        if ( lastPath === currentPath) return;
+        if ( lastPath === currentPath) {
+            closeReplyDialog();
+            return;
+        }
 
         const targetPath = window.location.pathname;
         const savedPos = scrollHistory[targetPath];
@@ -505,4 +598,10 @@
             }, 30); // 每 30ms 強制校正一次位置
         }
     });
+
+    const hrobserver = new IntersectionObserver(entries => {
+        for (let entry of entries) {
+            updateHrppHeight(entry.target);
+        }
+    }, { threshold: 0.3});
 })();
