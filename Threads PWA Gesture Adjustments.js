@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.2.0
+// @version      0.2.1
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -24,27 +24,44 @@
 
     // --- 核心：精準 popstate 邏輯 ---
     window.addEventListener('popstate', (e) => {
-        const currentPath = window.location.pathname;
-        const isCurrentlyHome = (currentPath === "/" || currentPath === "/home");
+        let cPath = window.location.pathname;
+        const isCurrentlyHome = (cPath === "/" || cPath === "/home");
 
         // 情況 A：從文章頁面返回首頁 (路徑改變)
-        if (isCurrentlyHome && lastPath !== currentPath) {
+        if (isCurrentlyHome && lastPath !== cPath) {
             console.log("🔙 返回首頁：保留原始位置");
             // 補回 Guard 標籤，但不觸發捲動，讓瀏覽器自動回到原位
             if (!window.location.hash.includes(TAG)) {
-                history.pushState({pwa: "guard"}, "", currentPath + TAG);
+                history.pushState({pwa: "guard"}, "", cPath + TAG);
             }
         }
-        // 情況 B：已經在首頁，再次按返回 (路徑沒變，但 Guard 標籤被返回吃掉了)
-        else if (isCurrentlyHome && lastPath === currentPath && !window.location.hash.includes(TAG)) {
-            console.log("🔝 首頁再次返回：捲動回頂端");
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-
+        else if (isCurrentlyHome && lastPath === cPath) {
+            e.stopImmediatePropagation();
             // 重新補上 Guard 標籤，防止直接跳出 PWA
-            history.pushState({pwa: "guard"}, "", currentPath + TAG);
+             if(window.scrollY>0){
+                console.log("🔝 首頁再次返回：捲動回頂端");
+                window.scrollTo({ top: 0, behavior: 'instant' });
+                history.pushState({pwa: "guard"}, "", cPath + TAG);
+
+            }
+            else{
+                const logo = document.querySelector('[aria-label="Threads"]');
+                const alink = logo.closest('a[href]');
+                
+                if(alink){
+                    alert(alink);
+                    alink.click();
+                    history.pushState({pwa: "guard"}, "", cPath + TAG);
+                }
+
+
+
+            }
+            cPath=cPath + TAG;
+
         }
 
-        lastPath = currentPath;
+        lastPath = cPath;
     }, true);
 
     // 部署 Guard 標籤
@@ -68,10 +85,11 @@
     }
 
     // 觸碰螢幕時啟動部署
-    window.addEventListener('touchstart', () => {
-        if (!isDeployed) doDeploy();
-    }, { passive: true });
-
+    ['touchstart', 'wheel'].forEach(evt => {
+        window.addEventListener(evt, (e) => {
+            if (!isDeployed) doDeploy();
+        }, { passive: true });
+    });
     // 攔截 SPA 內部的 pushState (換頁時更新路徑)
     const _ps = history.pushState;
     history.pushState = function() {
