@@ -394,8 +394,14 @@
                         btn.parentElement.style.setProperty('min-width','fit-content','important');
                         btn.parentElement.style.setProperty('justify-conten', 'flex-start','important');
                         svg.parentElement?.parentElement.style.setProperty("padding-left",'0px','important');
-                        svg.parentElement?.parentElement.style.setProperty("padding-right",'10px','important');
+                        svg.parentElement?.parentElement.style.setProperty("padding-right",'3px','important');
                         svg.parentElement?.parentElement.style.setProperty('width','fit-content','important');
+
+                        const popup = btn.closest('div[aria-haspopup="dialog"]');
+                        if(popup){
+                            popup.style.setProperty("padding-left",'0px','important');
+                            popup.style.setProperty("padding-right",'0px','important');
+                        }
                     }
                 });
                 break;
