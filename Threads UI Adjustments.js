@@ -386,15 +386,16 @@
                 if (container.dataset.styled) break;
                 container.dataset.styled = '1';
                 container.classList.add('custom-stack-move');
-                let plusdistance = 3;
                 Array.from(container.children).forEach((wrapper) => {
                     const btn = wrapper.querySelector('[role="button"]');
                     if (btn) {
                         const svg = btn.querySelector('svg');
                         if (svg) svg.style.transform = 'scale(0.8)';
-                        btn.parentElement.style.setProperty('max-width','25%','important');
-                        btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
-                        plusdistance--;
+                        btn.parentElement.style.setProperty('min-width','fit-content','important');
+                        btn.parentElement.style.setProperty('justify-conten', 'flex-start','important');
+                        svg.parentElement?.parentElement.style.setProperty("padding-left",'0px','important');
+                        svg.parentElement?.parentElement.style.setProperty("padding-right",'10px','important');
+                        svg.parentElement?.parentElement.style.setProperty('width','fit-content','important');
                     }
                 });
                 break;
