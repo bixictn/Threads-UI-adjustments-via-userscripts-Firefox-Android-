@@ -392,9 +392,9 @@
                     if (btn) {
                         const svg = btn.querySelector('svg');
                         if (svg) svg.style.transform = 'scale(0.8)';
-                        btn.parentElement.style.setProperty('width','25%','important');
-                        //btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
-                        //plusdistance--;
+                        btn.parentElement.style.setProperty('max-width','25%','important');
+                        btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
+                        plusdistance--;
                     }
                 });
                 break;
