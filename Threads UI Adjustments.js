@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.8
+// @version      0.9.7.9
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -392,8 +392,9 @@
                     if (btn) {
                         const svg = btn.querySelector('svg');
                         if (svg) svg.style.transform = 'scale(0.8)';
-                        btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
-                        plusdistance--;
+                        btn.parentElement.style.setProperty('width','25%','important');
+                        //btn.style.transform = 'translateX(' + (1.2 * plusdistance) + 'em)';
+                        //plusdistance--;
                     }
                 });
                 break;
@@ -541,7 +542,7 @@
         }
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-        document.querySelectorAll('svg[aria-label="讚"]').forEach(i => applyButtonStyle(i));
+        document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
         updateNavActiveState();
 
         cleanContent();
@@ -567,6 +568,7 @@
             return;
         }
 
+        if(window.scrollY === 0) return;
         const targetPath = window.location.pathname;
         const savedPos = scrollHistory[targetPath];
 
@@ -576,7 +578,7 @@
 
             targetScrollY = window.scrollY;
             if (targetScrollY < 10) {
-                isBackAction = false; // 如果在頂端，直接釋放
+                isBackAction = false;
                 hideBlackout();
                 return;
             }
@@ -595,7 +597,7 @@
                         isBackAction = false;
                     }, 200);
                 }
-            }, 30); // 每 30ms 強制校正一次位置
+            }, 30); 
         }
     });
 
