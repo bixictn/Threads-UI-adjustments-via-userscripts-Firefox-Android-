@@ -3,8 +3,7 @@
 // @version       0.9.3.3
 // @description   Twemoji Replacer
 // @author        Gemini
-// @match         https://www.threads.net/*
-// @match         https://www.threads.com/*
+// @match         *://*/*
 // @grant         GM_xmlhttpRequest
 // @connect       cdn.jsdelivr.net
 // @run-at        document-start
