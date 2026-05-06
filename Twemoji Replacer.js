@@ -1,68 +1,45 @@
 // ==UserScript==
 // @name          Twemoji Replacer
-// @version       0.9.2
+// @version       0.9.3.3
 // @description   Twemoji Replacer
 // @author        Gemini
-// @match         https://*/*
+// @match         https://www.threads.net/*
+// @match         https://www.threads.com/*
 // @grant         GM_xmlhttpRequest
 // @connect       cdn.jsdelivr.net
-// @run-at       document-start
+// @run-at        document-start
 // ==/UserScript==
 
 (function() {
     'use strict';
-
-    const EXCLUDE = ['github.com', 'stackoverflow.com', 'jsfiddle.net', 'google.com', 'facebook.com'];
-    if (EXCLUDE.some(d => location.hostname.includes(d))) return;
 
     const EMOJI_BASE = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/";
     const DB_NAME = "LocalEmojiCache";
     const STORE_NAME = "svg_data";
     const NF_MARK = "NF";
 
-    // 強化 ZWJ (200d) 和變體符號 (fe0f) 的連貫性抓取
-    const EMOJI_REGEX = /([\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}](\u{200D}[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{2100}-\u{2BFF}]\u{FE0F}?)*[\u{1F3FB}-\u{1F3FF}]?|(\u{1F1E6}-\u{1F1FF}){2}|[\u{2100}-\u{2BFF}]\u{FE0F}?)/gu;
-
+    const EMOJI_REGEX = /(([\u{1F1E6}-\u{1F1FF}]{2})|[\u0030-\u0039]\uFE0F?\u20E3|(([\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}][\u{1F3FB}-\u{1F3FF}]?\u{FE0F}?)(\u{200D}[\u{1F000}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{2100}-\u{2BFF}][\u{1F3FB}-\u{1F3FF}]?\u{FE0F}?)+)|[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}][\u{1F3FB}-\u{1F3FF}]?\u{FE0F}?|[\u{2000}-\u{2BFF}]\u{FE0F}?)/gu;
     let db = null;
     let isInit = false;
+    let isWorking = false;
 
-    function toCodePoint(unicode) {
-        const r = []; let c = 0, p = 0, i = 0;
-        while (i < unicode.length) {
-            c = unicode.charCodeAt(i++);
-            if (p) {
-                r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16));
-                p = 0;
-            } else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
-            else { r.push(c.toString(16)); }
-        }
+    const originalNodeValueSetter = Object.getOwnPropertyDescriptor(Node.prototype, 'nodeValue').set;
+    Object.defineProperty(Node.prototype, 'nodeValue', {
+        set: function(val) {
+            originalNodeValueSetter.call(this, val);
+            if (isWorking || typeof val !== 'string' || !EMOJI_REGEX.test(val)) return;
+            if (this.parentNode && !this.parentNode.closest('.tw-p-lock')) {
+                Promise.resolve().then(() => {
+                    isWorking = true;
+                    replaceEmojis(this.parentNode);
+                    isWorking = false;
+                });
+            }
+        },
+        configurable: true
+    });
 
-        const last = r[r.length - 1];
-        // 這些是 Twemoji 規範中「單獨出現也必須帶 fe0f」的清單
-        const forceFE0F = ['2194', '2195', '2640', '2642', '26a0', '2139'];
-
-        // 1. 處理組合 (如 🙂‍↕️ 成功合體的情況)
-        if (r.includes('200d')) {
-            if (forceFE0F.includes(last) && !r.includes('fe0f')) r.push('fe0f');
-            const res = r.join('-');
-            console.log(`[🧩 組合成功] Emoji: ${unicode} | 代碼: ${res}`);
-            return res;
-        }
-
-        // 2. 處理單圖 (如 ↕️ 真的單獨出現的情況)
-        if (forceFE0F.includes(last)) {
-            if (!r.includes('fe0f')) r.push('fe0f');
-            const res = r.join('-');
-            console.log(`[🛡️ 單圖保險] Emoji: ${unicode} | 代碼: ${res}`);
-            return res;
-        }
-
-        // 3. 一般單圖 (如 🙂)
-        const res = r.filter(x => x !== 'fe0f').join('-');
-        console.log(`[😀 一般單圖] Emoji: ${unicode} | 代碼: ${res}`);
-        return res;
-    }
-
+    // --- 2. 資料庫邏輯 ---
     async function initDB() {
         if (db) return db;
         if (isInit) return new Promise(res => {
@@ -81,9 +58,8 @@
     }
 
     async function fetchEmoji(raw, imgElement) {
-        let code = toCodePoint(raw);
+        const code = toCodePoint(raw);
         const _db = await initDB();
-
         const applyImg = (data) => {
             if (data && data !== NF_MARK) {
                 imgElement.src = data;
@@ -92,7 +68,6 @@
                 imgElement.replaceWith(document.createTextNode(raw));
             }
         };
-
         if (_db) {
             const tx = _db.transaction(STORE_NAME, "readonly");
             const cached = await new Promise(r => {
@@ -102,7 +77,6 @@
             });
             if (cached) return applyImg(cached.data);
         }
-
         GM_xmlhttpRequest({
             method: "GET", url: `${EMOJI_BASE}${code}.svg`, responseType: "blob", timeout: 4000,
             onload: (res) => {
@@ -114,23 +88,39 @@
                         applyImg(b64);
                     };
                     reader.readAsDataURL(res.response);
-                } else {
-                    initDB().then(d => { if(d) d.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ code, data: NF_MARK }); });
-                    applyImg(null);
                 }
-            },
-            onerror: () => applyImg(null)
+            }
         });
     }
 
+    function toCodePoint(unicode) {
+        const r = []; let c = 0, p = 0, i = 0;
+        while (i < unicode.length) {
+            c = unicode.charCodeAt(i++);
+            if (p) { r.push((0x10000 + ((p - 0xD800) << 10) + (c - 0xDC00)).toString(16)); p = 0; }
+            else if (0xD800 <= c && c <= 0xDBFF) { p = c; }
+            else { r.push(c.toString(16)); }
+        }
+        // ❤️‍🔥 檔名修復：確保路徑包含 fe0f-200d
+        if (r[0] === '2764' && r.includes('200d') && r[1] !== 'fe0f') r.splice(1, 0, 'fe0f');
+        const forceFE0F = ['2194', '2195', '2640', '2642', '26a0', '2139', '1f198', '24c2', '2611', '2705'];
+        if (r.includes('200d') || forceFE0F.includes(r[r.length-1])) {
+            if (!r.includes('fe0f')) r.push('fe0f');
+        }
+        return r.filter((x, idx) => x !== 'fe0f' || idx === r.length - 1 || r[idx+1] === '20e3').join('-');
+    }
+    // --- 3. 核心置換邏輯 ---
     function replaceEmojis(target) {
-        if (!target) return;
+        if (!target || (target.nodeType === 1 && target.closest('.tw-p-lock'))) return;
+
+        const parent = target.parentNode;
+        if (!parent) return;
 
         const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
         let n;
         while (n = walker.nextNode()) {
-            if (n.parentElement?.closest('script, style, textarea, .tw-p-lock')) continue;
+            if (n.parentElement?.closest('script, style, textarea, .tw-p-lock, .threads-profile-info-badge')) continue;
             EMOJI_REGEX.lastIndex = 0;
             if (EMOJI_REGEX.test(n.nodeValue || "")) nodes.push(n);
         }
@@ -138,60 +128,89 @@
         for (const node of nodes) {
             const parent = node.parentNode;
             if (!parent) continue;
-
             const text = node.nodeValue;
             const frag = document.createDocumentFragment();
-            let lastIdx = 0, match;
+            let lastIdx = 0, match, found = false;
             EMOJI_REGEX.lastIndex = 0;
-            let found = false;
 
             while ((match = EMOJI_REGEX.exec(text)) !== null) {
                 found = true;
-                frag.appendChild(document.createTextNode(text.substring(lastIdx, match.index)));
+                // 修正：只有當匹配前有文字時才附加
+                const preText = text.substring(lastIdx, match.index);
+                if (preText) frag.appendChild(document.createTextNode(preText));
+
+                let emoji = match[0];
+                let nextIdx = EMOJI_REGEX.lastIndex;
+                if (text.codePointAt(nextIdx) === 0xFE0F) {
+                    emoji += '\uFE0F';
+                    nextIdx++;
+                    EMOJI_REGEX.lastIndex = nextIdx;
+                }
 
                 const lockSpan = document.createElement('span');
                 lockSpan.className = "tw-p-lock";
-                lockSpan.style.display = "inline-block";
+                Object.assign(lockSpan.style, { display: "inline"});
 
                 const img = document.createElement('img');
                 img.className = "twemojified";
-                img.alt = match[0];
+                img.alt = emoji;
                 Object.assign(img.style, {
                     height: "1.1em", width: "1.1em", verticalAlign: "middle",
-                    margin: "0 0.05em 0.1em 0.05em", display: "inline-block",
-                    opacity: "0", transition: "opacity 0.1s"
+                    margin: "0 0.05em 0.1em 0.05em"
                 });
-
                 lockSpan.appendChild(img);
+                fetchEmoji(emoji, img);
                 frag.appendChild(lockSpan);
-                fetchEmoji(match[0], img);
-                lastIdx = EMOJI_REGEX.lastIndex;
+                lastIdx = nextIdx;
             }
 
             if (found) {
-                frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+                // 修正：只有當結尾真的有剩餘文字時才附加 (消除空白節點關鍵)
+                const postText = text.substring(lastIdx);
+                if (postText) frag.appendChild(document.createTextNode(postText));
                 parent.replaceChild(frag, node);
             }
         }
     }
 
+    // --- 4. 啟動與監測 ---
     let timer;
     const observer = new MutationObserver(() => {
         clearTimeout(timer);
-        timer = setTimeout(() => replaceEmojis(document.body), 50);
+        timer = setTimeout(() => {
+            isWorking = true;
+            replaceEmojis(document.body);
+            isWorking = false;
+        }, 100);
     });
 
     const start = async () => {
         await initDB();
         replaceEmojis(document.body);
         observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-
-        window.addEventListener('scroll', () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => replaceEmojis(document.body), 150);
-        }, { passive: true });
     };
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
+
+    document.addEventListener('twemoji-reset-request', (e) => {
+
+        if (observer) {
+            observer.disconnect();
+            observer.takeRecords();
+        }
+
+        isWorking = false;
+
+        setTimeout(() => {
+            replaceEmojis(document.body);
+            if (observer) {
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true
+                });
+            }
+        }, 200);
+    }, true);
 })();
