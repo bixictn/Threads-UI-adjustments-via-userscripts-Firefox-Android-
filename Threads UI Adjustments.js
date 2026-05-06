@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7.9
+// @version      0.9.8
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -27,6 +27,10 @@
         /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
         html, body { overflow-x: hidden !important; }
+
+        div[role="region"]{
+            width:640px !important;
+        }
 
         a[aria-label] span[dir="auto"] {
             color: #808080 !important;
@@ -141,13 +145,13 @@
     (document.body || document.documentElement).appendChild(blackoutDiv);
 
     function showBlackout() {
-        blackoutDiv.style.display = 'flex'; 
+        blackoutDiv.style.display = 'flex';
     }
 
     function hideBlackout() {
         const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
         if (pageZero) {
-            void pageZero.offsetHeight; 
+            void pageZero.offsetHeight;
             pageZero.style.setProperty('opacity', '1', 'important');
         }
         blackoutDiv.style.display = 'none';
@@ -215,17 +219,63 @@
         timeEl.dataset.processed = "done";
     }
 
-    function isNestedPost(el) {
+    function emojiSize(){
+        const spans = document.querySelectorAll('span');
+        for ( const span of spans){
+            if(span.className !== '') continue;
+            if(span.dataset.processed) continue;
+            const twlock=span.querySelectorAll('span[class="tw-p-lock"]');
+            if(!twlock)continue;
+            const emojis = span.querySelectorAll('img[class*="twemoji"]');
+            // 取得容器內的純文字（去除空白）
+            const textContent = span.textContent.trim();
+            const segmenter = new Intl.Segmenter('zh-TW', { granularity: 'grapheme' });
+            const segments = segmenter.segment(textContent);
+            // 條件：純文字長度為 0 且 emoji 數量在 1~3 個之間
+            if ([...segments].length === (twlock.length-emojis.length) && emojis.length > 0 && emojis.length <= 3) {
+                span.dataset.processed=true;
+                span.style.setProperty('display', 'flex','important');
+                span.style.setProperty('line-height', '58px','important');
+
+                twlock.forEach(twspan => {
+                    twspan.style.setProperty('display', 'flex','important');
+                    twspan.style.setProperty('height', '60px', 'important');
+                    twspan.style.setProperty('width', '60px', 'important');
+                    twspan.style.setProperty('font-size','49px','important');
+                    twspan.style.setProperty('margin', '0px 5px 0px 0px', 'important');
+                    twspan.style.setProperty('line-height', '58px','important');
+                    twspan.style.setProperty('align-items', 'center','important');
+                    twspan.style.setProperty('justify-content','center','important');
+                    const emoji = twspan.querySelector('img[class*="twemoji"]');
+                    if(emoji){
+                        emoji.style.setProperty('display', 'flex','important');
+                        emoji.style.setProperty('line-height', '58px','important');
+                        emoji.style.setProperty('display', 'flex','important');
+                        emoji.style.setProperty('height', '54px', 'important');
+                        emoji.style.setProperty('width', '54px', 'important');
+                        emoji.style.setProperty('font-size','48px','important');
+                        emoji.style.setProperty('align-items', 'center','important');
+                        emoji.style.setProperty('justify-content','center','important');
+                    }
+                });
+            }
+
+        }
+    }
+
+     function isNestedPost(el) {
         // 如果 el 本身是容器，且它的子層也有容器，文章有引文
         return el.matches('[data-pressable-container="true"]') &&
             el.querySelector('[data-pressable-container="true"]');
     }
+
 
     function handleMainPageindent(){//主頁
         const posts = document.querySelectorAll('[data-pressable-container="true"]');
         if (!posts) return;
         for (const [index, post] of posts.entries()) {
             const inpost = post.querySelector('[data-pressable-container="true"]')
+
             if(isNestedPost(post) && inpost){
                 handleInPostPageIndent(inpost);//有引文
                 inpost.dataset.processed=true;
@@ -242,7 +292,11 @@
             anchor.style.setProperty('margin-left', '52px', 'important');
             anchor.style.setProperty('width', 'calc(100% - 52px)', 'important');
             anchor.dataset.indentDone = "true";
-
+            const pd = anchor.closest('[data-pressable-container="true"]');
+            const spp = pd.querySelector('span').parentElement;
+            spp.style.setProperty('align-items', 'center','important');
+            spp.style.setProperty('flex-wrap','wrap','important');
+            spp.style.setProperty('justify-content', 'center','important');
             if(check>2)break;
         }
     }
@@ -301,7 +355,6 @@
                                     target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
-
                                     toTop(index);
 
                                     hideBlackout(); 
@@ -321,7 +374,6 @@
                         target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                         target.dataset.indentDone = "true";
                         pageZero.dataset.processed = "true";
-
                         toTop(index);
 
                         hideBlackout(); 
@@ -344,7 +396,6 @@
                                     target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
-
                                     toTop(index);
 
                                     hideBlackout();
@@ -402,6 +453,7 @@
                             popup.style.setProperty("padding-left",'0px','important');
                             popup.style.setProperty("padding-right",'0px','important');
                         }
+
                     }
                 });
                 break;
@@ -554,6 +606,32 @@
 
         cleanContent();
         hrstyle();
+        emojiSize();
+
+    }
+
+    function deepCleanEmojiMemory() {
+        console.log("Threads UI Adj: 執行記憶體清理...");
+
+        // 1. 移除所有已被置換的 Emoji 容器，強迫釋放 DOM 引用
+        const locks = document.querySelectorAll('.tw-p-lock');
+        locks.forEach(el => {
+            // 還原為原始 alt 文字（Emoji 原型），這有助於垃圾回收
+            const img = el.querySelector('img');
+            if (img && img.alt) {
+                el.replaceWith(document.createTextNode(img.alt));
+            } else {
+                el.remove();
+            }
+        });
+
+        console.log("Threads UI Adj: 發送重置信號...");
+        const resetEvent = new CustomEvent('twemoji-reset-request', {
+            detail: { timestamp: Date.now() },
+            bubbles: true,
+            cancelable: true
+        });
+        document.dispatchEvent(resetEvent);
     }
 
     const observer = new MutationObserver(mainLoop);
@@ -569,6 +647,7 @@
 
 
     window.addEventListener('popstate', () => {
+
         const currentPath = window.location.pathname;
         if ( lastPath === currentPath) {
             closeReplyDialog();
@@ -579,13 +658,15 @@
         const targetPath = window.location.pathname;
         const savedPos = scrollHistory[targetPath];
 
+        deepCleanEmojiMemory();
+
         if (savedPos !== undefined) {
             isBackAction = true;
             showBlackout();
 
             targetScrollY = window.scrollY;
             if (targetScrollY < 10) {
-                isBackAction = false;
+                isBackAction = false; 
                 hideBlackout();
                 return;
             }
