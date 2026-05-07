@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8
-// @description  Threads ID & Lee-Su-Threads (Fixed Logic & Selectors)
+// @version      0.4.8.1
+// @description  Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
@@ -195,12 +195,67 @@
         let display = (getTimestampFromMonth("2025年12月") - getTimestampFromMonth(data.joined) <= 0) ? `🔍\n${data.joined}` : `📅\n${data.joined}`;
         display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
 
-        if (getTimestampFromMonth(data.joined) > 0 && (Date.now() - getTimestampFromMonth(data.joined)) < (ONE_WEEK * 8)) {
-            display += "\n✨[新帳號]";
-        }
 
+        const now = Date.now();
+        const joinedTs = getTimestampFromMonth(data.joined);
+        const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
+
+        let nTs='70px';
+        // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
+        if (joinedTs > 0 && (now - joinedTs) < TWO_MONTHS) {
+            display += "\n✨[新帳號]";
+            nTs='80px';
+        }
         container.classList.add("cake-avatar-anchor");
         container.setAttribute('data-cake-date', display);
+
+        if (!container.querySelector('.cake-ig-link')) {
+            const igLink = document.createElement('a');
+            igLink.className = 'cake-ig-link';
+            igLink.href = `https://www.instagram.com/${data.userId}/`;
+            igLink.target = '_blank';
+            igLink.innerText = '📸 IG';
+
+            igLink.style.cssText = `
+                position: absolute;
+                top: ${nTs};
+                left: 50%;
+                transform: translateX(-50%); /* 水平居中 */
+                font-size: 12px;
+                z-index: 1000 !important;
+                cursor: pointer !important;
+                pointer-events: auto !important;
+                text-decoration: none;
+                padding: 2px 2px;
+                border-radius: 5px;
+                background: rgba(128, 128, 128, 0.1);
+                color: #A0A0A0;
+                white-space: nowrap;
+                transition: all 0.2s ease;
+                border: 1px solid transparent;
+            `;
+
+            // 💡 懸停效果：變彩色並加邊框
+            igLink.onmouseenter = () => {
+                igLink.style.background = 'rgba(214, 41, 118, 0.1)';
+                igLink.style.color = '#E1306C';
+                igLink.style.borderColor = 'rgba(214, 41, 118, 0.3)';
+                igLink.style.transform = 'translateX(-50%) scale(1.1)';
+            };
+            igLink.onmouseleave = () => {
+                igLink.style.background = 'rgba(128, 128, 128, 0.1)';
+                igLink.style.color = '#A0A0A0';
+                igLink.style.borderColor = 'transparent';
+                igLink.style.transform = 'translateX(-50%) scale(1)';
+            };
+
+            // 阻斷冒泡
+            igLink.onclick = (e) => e.stopPropagation();
+            igLink.onmousedown = (e) => e.stopPropagation();
+
+            container.appendChild(igLink);
+        }
+
         if (!isStale) img.dataset.processed = "done";
     }
 
