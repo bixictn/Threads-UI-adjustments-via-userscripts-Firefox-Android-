@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8.1
-// @description  Threads ID & Lee-Su-Threads
+// @version      0.4.8.2
+// @description  Threads ID & Lee-Su-Threads 
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
@@ -95,6 +95,7 @@
 
             const href = userLink.getAttribute('href').split('?')[0];
             const userId = href.replace(/^\/@?/, '').split('/')[0];
+            if(!isInViewport(userLink))continue;
 
             const cached = await new Promise(res => {
                 const tx = db.transaction([STORE_NAME], 'readonly');
@@ -117,6 +118,26 @@
             const badge = scope.querySelector('[class*="threads-"][title]');
             const container = img.parentElement?.parentElement;
             if (!container) continue;
+
+            // 🎯 新增：處理 badge 尚未載入的情況
+            if (!badge) {
+                const firstSeen = parseInt(scope.dataset.cakeFirstSeen || 0);
+                const now = Date.now();
+
+                if (!firstSeen) {
+                    // 第一次看到這則貼文，記錄時間
+                    scope.dataset.cakeFirstSeen = now;
+                    console.log(`[⏳] 等待按鈕載入... (${userId})`);
+                } else if (now - firstSeen > 5000) {
+                    // 已經等超過 5 秒了，放棄這則貼文
+                    console.log(`[⏭️] 等待超時，跳過此貼文: ${userId}`);
+                    img.dataset.processed = "done"; // 標記為完成，往後不再掃描
+                }
+                continue; // 這一輪先跳過，等下一輪掃描
+            }
+
+            // 如果 badge 出現了，清除計時標記 (可選)
+            delete scope.dataset.cakeFirstSeen;
 
             const isWaiting = container.getAttribute('data-cake-date') === "⏳";
             const title = badge?.title || "";
@@ -153,7 +174,11 @@
             }
 
             // 🎯 觸發點擊 (如果沒資料且不在等待中)
-            if (!isWaiting && isInViewport(scope)) {
+            if (!isWaiting) {
+                if (container) {
+                    container.classList.add("cake-avatar-anchor");
+                    container.setAttribute('data-cake-date', "⏳");
+                }
                 handleCapture(scope, userId);
             }
         }
@@ -261,14 +286,14 @@
 
     function hideBadge(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
-        if (badge) badge.style.setProperty('display', 'none', 'important');
+        //if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
     initDB().then(() => {
         const style = document.createElement('style');
         style.textContent = `
             @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
-            [class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
+            //[class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
             .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
             .cake-avatar-anchor::after {
                 content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
@@ -278,6 +303,6 @@
             .cake-avatar-anchor[data-cake-date="⏳"]::after { animation: hourglass-flip 1s linear infinite !important; }
         `;
         document.head.appendChild(style);
-        setTimeout(() => { setInterval(doSmartSync, 1500); doSmartSync(); }, 2500);
+        setTimeout(() => { setInterval(doSmartSync, 1500); doSmartSync(); }, 1500);
     });
 })();
