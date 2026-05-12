@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.8.3
-// @description  Lee-su-Threads save to IndexedDB: Adaptive UI for Light/Dark Mode
+// @version      0.2.8.4
+// @description  Lee-su-Threads save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -13,10 +13,11 @@
     const version='v0.2.8';
     const db_version=1;
     const ZIpanel=3,ZIbtn=4,ZIpgb=2;
+    let caller=false;
     // 判斷當寬度小於高度時（直向螢幕/手機模式），開啟水平居中校正
     let modeadd = (window.innerWidth < window.innerHeight)
-              ? "transform: translateX(-50%) !important;"
-              : "";
+    ? "transform: translateX(-50%) !important;"
+    : "";
     //css
     const style = document.createElement('style');
     style.textContent = `
@@ -40,6 +41,8 @@
 			#threads-idb-data-panel {
 				top: 32px !important;
 				left: 2% !important;
+                width: 80% !important;
+
 			}
 		}
 
@@ -291,6 +294,10 @@
     };
 
     const showPanel = async () => {
+        if(!caller){
+            caller=true;
+            setDMAction(true);
+        }
         if (panel) return;
         const stats = await getStats();
         window.history.pushState({ idbPanelOpen: true }, "");
@@ -442,8 +449,7 @@
         if (!btn) {
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
-            btn.innerHTML = '📊';
-            //btn.style.cssText = `position:fixed!important;top:14px!important;left:20%!important;width:32px!important;height:32px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;cursor:pointer!important;z-index:${ZIbtn} !important;backdrop-filter:blur(4px);`;
+            btn.innerHTML = '📊';            
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
         } else {
@@ -451,7 +457,7 @@
         }
     };
 
-   const closePanel = (isPop = false) => {
+    const closePanel = (isPop = false) => {
         if (panel) {
             panel.remove();
             panel = null;
@@ -461,10 +467,26 @@
             overlay = null;
         }
         unlockScroll();
-        if (!isPop) window.history.back();
-   }
+        if (!isPop) {
+            window.history.back();
+        }
+        else{
+            if(caller){
+                caller=false;
+                setDMAction(false);
+            }
+        }
+    }
 
-    window.onpopstate = () => closePanel(true);
+    function setDMAction(tf){
+        if (window.THREADS_PWA && window.THREADS_PWA.setDMAction) {
+            window.THREADS_PWA.setDMAction(tf);
+        }
+    }
+
+    window.onpopstate = (e) => {
+        closePanel(true);
+    };
     setInterval(patrolBtn, 1000);
     patrolBtn();
 })();
