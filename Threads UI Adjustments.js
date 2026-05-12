@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.8
+// @version      0.9.8.2
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -11,13 +11,9 @@
 
 (function() {
     'use strict';
-
-    let lastPath = "";
-    let isBackAction = false;
-    let targetScrollY = 0;
-    let scrollLockActive = false;
     const ZImenu=8,ZIdialog=7,ZIbg=5;
-    let scrollHistory = {}, replylist=[];
+    const replylist=[];
+
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
@@ -94,7 +90,6 @@
         .custom-stack-move {
             display: flex !important;
             justify-content: flex-end !important;
-            width: 100% !important;
         }
 
         #ultimate-blackout {
@@ -139,11 +134,22 @@
     `;
     (document.head || document.documentElement).appendChild(style);
 
+    window.THREADS_UI = {
+        ActiveShowBlackout: () => {
+            showBlackout();
+        },
+        ActiveHideBlackout: () => {
+            hideBlackout();
+        }
+    };
+
     const blackoutDiv = document.createElement('div');
     blackoutDiv.id = 'ultimate-blackout';
     blackoutDiv.innerHTML = '<div id="aligntime">⏳</div>';
     (document.body || document.documentElement).appendChild(blackoutDiv);
 
+
+    //毛玻璃布幕---Start
     function showBlackout() {
         blackoutDiv.style.display = 'flex';
     }
@@ -156,7 +162,9 @@
         }
         blackoutDiv.style.display = 'none';
     }
+    //毛玻璃布幕---End
 
+    //Format username time subject --- Start
     function applyIdReformat(timeEl) {
         if (timeEl.dataset.processed === "done") return;
         let featureLayer = timeEl.parentElement;
@@ -218,7 +226,9 @@
         }
         timeEl.dataset.processed = "done";
     }
+    //Format username time subject --- End
 
+    //EmojiSize --- Start
     function emojiSize(){
         const spans = document.querySelectorAll('span');
         for ( const span of spans){
@@ -262,8 +272,10 @@
 
         }
     }
+    //EmojiSize --- End
 
-     function isNestedPost(el) {
+    //Post adj --- Start
+    function isNestedPost(el) {
         // 如果 el 本身是容器，且它的子層也有容器，文章有引文
         return el.matches('[data-pressable-container="true"]') &&
             el.querySelector('[data-pressable-container="true"]');
@@ -280,6 +292,16 @@
                 handleInPostPageIndent(inpost);//有引文
                 inpost.dataset.processed=true;
             }
+        }
+        const post = posts[0];
+        try{
+            const feed = (post.closest('[data-pagelet="threads_feed_0"]'));
+            if(feed){
+                feed.dataset.processed=true;
+            }
+        }
+        catch(exception){
+
         }
     }
 
@@ -355,9 +377,7 @@
                                     target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
-                                    toTop(index);
-
-                                    hideBlackout(); 
+                                    if(index===0)toTop();
                                     return;
                                 }
                             }
@@ -374,9 +394,8 @@
                         target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                         target.dataset.indentDone = "true";
                         pageZero.dataset.processed = "true";
-                        toTop(index);
+                        if(index===0)toTop();
 
-                        hideBlackout(); 
                         return;
                     }
                 }
@@ -396,9 +415,8 @@
                                     target.style.setProperty('width', 'calc(100% - 52px)', 'important');
                                     target.dataset.indentDone = "true";
                                     pageZero.dataset.processed = "true";
-                                    toTop(index);
+                                    if(index===0)toTop();
 
-                                    hideBlackout();
                                     return;
                                 }
                             }
@@ -409,27 +427,17 @@
                 }
             }
         }
-
-        hideBlackout();
     }
 
-    function toTop(index){
-
-        if (index === 0) {
-            if (!isBackAction && !scrollLockActive) {
-
-                window.scrollTo({ top: 0, behavior: 'instant' });
-                [0, 150, 300, 500].forEach(delay => {
-                    setTimeout(() => {
-                        window.scrollTo(0, 0);
-                        document.documentElement.scrollTop = 0;
-                        document.body.scrollTop = 0;
-                    }, delay);
-                });
-            }
+    function toTop(){
+        if (window.THREADS_PWA && window.THREADS_PWA.toTopActive) {
+            window.THREADS_PWA.toTopActive();
         }
     }
 
+    //Post adj --- End
+
+    //button popupmenu adj --- start
     function applyButtonStyle(likeIcon) {
         let container = likeIcon.parentElement;
         for(let i=0; i<6; i++) {
@@ -461,10 +469,10 @@
             if(container) container = container.parentElement;
         }
     }
+    //button popupmenu adj --- End
 
+    //navigation --- start
     function updateNavActiveState() {
-
-
         const windowWidth = window.innerWidth;
         if(windowWidth > 695){
             const firsthtmldiv = document.querySelector('div[class*="html-div"');
@@ -503,6 +511,7 @@
             }
         });
     }
+    //navigation --- End
 
     function cleanContent() {
         document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
@@ -517,14 +526,15 @@
         });
     }
 
-    function hrstyle() {
+    //ReplyDialog option mobile version Adj --- Start
+    function hrstyle() {//replay
         const hrs = document.querySelectorAll('hr[class*="html-hr"]');
 
         if(!hrs)return;
 
         for(const [index, hr] of hrs.entries()){
             const hrpp = hr.parentElement?.parentElement;
-
+            if (!hrpp || !hrpp.children || hrpp.children.length === 0) continue;
             const reply = hrpp.querySelector('svg[aria-label=""][role="img"]');
             if(!reply) continue;
             if(reply.parentElement?.parentElement.tagName !== 'DIV') continue;
@@ -534,9 +544,10 @@
 
 
             const hrp = hr.parentElement;
-            hrp.style.setProperty("flex-grow", "1", "important");
-            hrp.style.setProperty("display", "flex", "important");
-
+            window.requestAnimationFrame(() => {
+                hrp.style.setProperty("flex-grow", "1", "important");
+                hrp.style.setProperty("display", "flex", "important");
+            });
             const currentPath = window.location.pathname;
             const currentPathnode = currentPath.split('/');
             if(!currentPath.includes('/@') && currentPathnode.length==2) hrp.style.setProperty("align-items", "center", "important");
@@ -559,139 +570,50 @@
             target.style.setProperty("min-height", `${h}px`, "important");
             if(h>50) {
                 replylist.push(target);
-                history.pushState({ type: 'reply_open' }, '');
             }
         }
     }
+    //ReplayDialog
 
-    function closeReplyDialog() {
-        const cancelButton = Array.from(document.querySelectorAll('div[role="button"]'))
-        .find(el => el.innerText === '取消' || el.textContent === '取消');
-
-        if (cancelButton) {
-            cancelButton.click();
-        }
-    }
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
+        const check=document.querySelector('[data-pagelet="threads_feed_0"],[data-pagelet="threads_post_page_0"]');
 
-        // 1. 路徑變更偵測
-        if (lastPath !== currentPath) {
-            if (isBackAction) {
-                // 如果是返回動作，只更新路徑紀錄，不准執行任何重置或捲動
-                lastPath = currentPath;
-            } else {
-                // 只有「主動點擊進入」才執行的重置
-                lastPath = currentPath;
-                const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
-                if (pageZero) {
-                    pageZero.removeAttribute('data-processed');
-                    pageZero.style.setProperty('opacity', '0', 'important');
-                }
-                showBlackout();
+        if (check !== null){
+            if(check.dataset.processed ==='true') {
+                hideBlackout();
             }
         }
+
+        if(currentPath.includes('/@') && !currentPath.includes('/post/'))hideBlackout();
+
+        document.querySelectorAll('time').forEach(t => applyIdReformat(t));
+        document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
+
+        updateNavActiveState();
+        cleanContent();
+        hrstyle();
+        emojiSize();
 
         if (currentPath.includes('/post/')) {
             handlePostPageIndent();
         } else {
             handleMainPageindent();
-            if (!isBackAction) hideBlackout();
         }
 
-        document.querySelectorAll('time').forEach(t => applyIdReformat(t));
-        document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
-        updateNavActiveState();
 
-        cleanContent();
-        hrstyle();
-        emojiSize();
 
     }
 
-    function deepCleanEmojiMemory() {
-        console.log("Threads UI Adj: 執行記憶體清理...");
-
-        // 1. 移除所有已被置換的 Emoji 容器，強迫釋放 DOM 引用
-        const locks = document.querySelectorAll('.tw-p-lock');
-        locks.forEach(el => {
-            // 還原為原始 alt 文字（Emoji 原型），這有助於垃圾回收
-            const img = el.querySelector('img');
-            if (img && img.alt) {
-                el.replaceWith(document.createTextNode(img.alt));
-            } else {
-                el.remove();
-            }
-        });
-
-        console.log("Threads UI Adj: 發送重置信號...");
-        const resetEvent = new CustomEvent('twemoji-reset-request', {
-            detail: { timestamp: Date.now() },
-            bubbles: true,
-            cancelable: true
-        });
-        document.dispatchEvent(resetEvent);
-    }
-
-    const observer = new MutationObserver(mainLoop);
+    const observer = new MutationObserver(()=>{mainLoop();});
     observer.observe(document.documentElement, { childList: true, subtree: true });
-
-
-    // 1. 隨時記錄每個路徑的捲軸位置
-    window.addEventListener('scroll', () => {
-        if (!isBackAction) {
-            scrollHistory[window.location.pathname] = window.scrollY;
-        }
-    }, { passive: true });
-
-
-    window.addEventListener('popstate', () => {
-
-        const currentPath = window.location.pathname;
-        if ( lastPath === currentPath) {
-            closeReplyDialog();
-            return;
-        }
-
-        if(window.scrollY === 0) return;
-        const targetPath = window.location.pathname;
-        const savedPos = scrollHistory[targetPath];
-
-        deepCleanEmojiMemory();
-
-        if (savedPos !== undefined) {
-            isBackAction = true;
-            showBlackout();
-
-            targetScrollY = window.scrollY;
-            if (targetScrollY < 10) {
-                isBackAction = false; 
-                hideBlackout();
-                return;
-            }
-
-            scrollLockActive = true;
-            let attempts = 0;
-            const recoverScroll = setInterval(() => {
-                window.scrollTo(0, savedPos);
-                attempts++;
-
-                // 嘗試多次，直到 Threads 渲染完成或是嘗試過久
-                if (attempts > 30 || Math.abs(window.scrollY - savedPos) < 2) {
-                    clearInterval(recoverScroll);
-                    setTimeout(() => {
-                        hideBlackout();
-                        isBackAction = false;
-                    }, 200);
-                }
-            }, 30); 
-        }
-    });
 
     const hrobserver = new IntersectionObserver(entries => {
         for (let entry of entries) {
             updateHrppHeight(entry.target);
         }
     }, { threshold: 0.3});
+
+    showBlackout();
 })();
