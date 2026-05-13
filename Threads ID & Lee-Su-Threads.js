@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8.2
-// @description  Threads ID & Lee-Su-Threads 
+// @version      0.4.8.3
+// @description  Threads ID & Lee-Su-Threads (Fixed Logic & Selectors)
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
@@ -17,48 +17,7 @@
     let db;
     const db_version = 1;
 
-    const fetchMap = new Map();
-    const originalFetch = window.fetch;
-
-    // --- 1. Fetch 攔截器 ---
-    window.fetch = async (...args) => {
-        const response = await originalFetch(...args);
-        const url = (typeof args[0] === 'string') ? args[0] : args[0].url;
-
-        if (url && url.includes("about_this_profile_async_action")) {
-            const clone = response.clone();
-            clone.text().then(async (rawText) => {
-                const decode = (s) => s ? s.replace(/\\u([0-9a-fA-F]{4})/g, (m, g) => String.fromCharCode(parseInt(g, 16))) : null;
-
-                const countryMatch = rawText.match(/"about_this_profile_country".*?"initial"\s*:\s*"([^"]+)"/);
-                let country = "未分享";
-                if (countryMatch) {
-                    const cName = decode(countryMatch[1]);
-                }
-
-                const dateMatch = rawText.match(/"text"\s*:\s*"(\d{4}\\u5e74\d{1,2}\\u6708[^"]*)"/);
-                let joinedDate = "未知日期";
-                if (dateMatch) {
-                    const rawDate = decode(dateMatch[1]);
-                    joinedDate = rawDate.split(/\s[·•]\s/)[0].trim();
-                }
-
-                const uMatch = rawText.match(/"bk\.components\.TextSpan".*?"text"\s*:\s*"([^"]+)"/);
-                let finalUserId = uMatch ? decode(uMatch[1]) : null;
-                if (finalUserId && finalUserId.includes('@')) {
-                    finalUserId = finalUserId.split('@')[1].split(/[）)]/)[0].trim();
-                }
-
-                if (finalUserId) {
-                    fetchMap.set(finalUserId, { joined: joinedDate, location: country });
-                    console.log(`[📦 Fetch 暫存] 帳號: ${finalUserId}`);
-                }
-            });
-        }
-        return response;
-    };
-
-    // --- 2. DB 初始化 ---
+    // --- DB 初始化 ---
     const initDB = () => {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, db_version);
@@ -83,6 +42,7 @@
     }
 
     async function doSmartSync() {
+        if (!window.THREADS_PWA?.isStartTouch)return;
         if (!db) return;
         const articles = document.querySelectorAll('[data-pressable-container="true"]');
 
@@ -143,30 +103,13 @@
             const title = badge?.title || "";
             const content = badge?.innerText || "";
 
-            // 🎯 A：從Lee-Su-Threads取資料
-            if (title.includes("加入時間") && !content.includes("⏳")) {
-                const data = {
-                    userId,
-                    joined: title.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim(),
-                    location: content.replace("⏳", "").replace("[新帳號]", "").trim(),
-                    timestamp: Date.now()
-                };
-                db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).put(data);
-                fetchMap.delete(userId);
-                console.log(`[📦 移除Fetch暫存] 帳號: ${userId}`);
-                renderUI(scope, data);
-                hideBadge(scope);
-                continue;
-            }
-
-            // 🎯 B：從 FetchMap 取資料 (救援)
-            if (isWaiting && fetchMap.has(userId)) {
-                const fData = fetchMap.get(userId);
-                const locFix = {"台灣":"🇹🇼 台灣","日本":"🇯🇵 日本","韓國":"🇰🇷 韓國","美國":"🇺🇸 美國","加拿大":"🇨🇦 加拿大","澳洲":"🇦🇺 澳洲","英國":"🇬🇧 英國","香港":"🇭🇰 香港","澳門":"🇲🇴 澳門","中國":"🇨🇳 中國"};
-                const location = locFix[fData.location] || fData.location;
-                const finalData = { userId, joined: fData.joined, location: `${location}`, timestamp: Date.now() };
+            // 🎯 從 FetchMap 取資料
+            if (window.THREADS_LST_FD.has(userId)) {
+                const fData = window.THREADS_LST_FD.getUserData(userId);
+                const location = fData.location;
+                const finalData = { userId, joined: fData.joined, location: `${location}`, timestamp: Date.now(),usernumber: fData.usernumber};
                 db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).put(finalData);
-                fetchMap.delete(userId);
+                window.THREADS_LST_FD.deleteUser(userId);
                 console.log(`[📦 移除Fetch暫存] 帳號: ${userId}`);
                 renderUI(scope, finalData);
                 hideBadge(scope);
@@ -218,7 +161,7 @@
         if (!container) return;
 
         let display = (getTimestampFromMonth("2025年12月") - getTimestampFromMonth(data.joined) <= 0) ? `🔍\n${data.joined}` : `📅\n${data.joined}`;
-        display += (data.location === "未分享") ? `\n🫥未分享` : `\n${data.location}`;
+        display += (data.location === "未分享") ? `\n🫥未分享` : `\n${window.THREADS_LST_FD.getFlagEmoji(data.location) +" "+ data.location}`;
 
 
         const now = Date.now();
@@ -286,14 +229,14 @@
 
     function hideBadge(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
-        //if (badge) badge.style.setProperty('display', 'none', 'important');
+        if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
     initDB().then(() => {
         const style = document.createElement('style');
         style.textContent = `
             @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
-            //[class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
+            [class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
             .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
             .cake-avatar-anchor::after {
                 content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
