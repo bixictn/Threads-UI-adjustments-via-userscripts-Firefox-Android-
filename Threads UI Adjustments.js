@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.8.3
+// @version      0.9.8.5
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -580,13 +580,7 @@
         const currentPath = window.location.pathname;
         const check=document.querySelector('[data-pagelet="threads_feed_0"],[data-pagelet="threads_post_page_0"]');
 
-        if (check !== null){
-            if(check.dataset.processed ==='true') {
-                hideBlackout();
-            }
-        }
 
-        if(currentPath.includes('/@') && !currentPath.includes('/post/'))hideBlackout();
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
@@ -602,7 +596,13 @@
             handleMainPageindent();
         }
 
+        if (check !== null){
+            if(check.dataset.processed ==='true') {
+                hideBlackout();
+            }
+        }
 
+        if(currentPath.includes('/@') && !currentPath.includes('/post/'))hideBlackout();
 
     }
 
