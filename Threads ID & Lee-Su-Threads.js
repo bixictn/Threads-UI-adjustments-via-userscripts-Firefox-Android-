@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8.3
-// @description  Threads ID & Lee-Su-Threads (Fixed Logic & Selectors)
+// @version      0.4.8.5
+// @description  Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
@@ -10,30 +10,7 @@
 
 (function() {
     'use strict';
-
-    const DB_NAME = 'ThreadsProfileDB';
-    const STORE_NAME = 'profilecache';
     const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-    let db;
-    const db_version = 1;
-
-    // --- DB 初始化 ---
-    const initDB = () => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, db_version);
-            request.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                let store = db.objectStoreNames.contains(STORE_NAME) ?
-                    e.target.transaction.objectStore(STORE_NAME) :
-                    db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
-                if (!store.indexNames.contains('timestamp')) {
-                    store.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-            };
-            request.onsuccess = (e) => { db = e.target.result; resolve(); };
-            request.onerror = (e) => reject(e.target.error);
-        });
-    };
 
     // --- 3. 核心功能 ---
     function isInViewport(el) {
@@ -43,7 +20,8 @@
 
     async function doSmartSync() {
         if (!window.THREADS_PWA?.isStartTouch)return;
-        if (!db) return;
+        const usePlguin=(window.THREADS_DB_CENTER)?false:true;
+
         const articles = document.querySelectorAll('[data-pressable-container="true"]');
 
         for (const scope of articles) {
@@ -57,23 +35,20 @@
             const userId = href.replace(/^\/@?/, '').split('/')[0];
             if(!isInViewport(userLink))continue;
 
-            const cached = await new Promise(res => {
-                const tx = db.transaction([STORE_NAME], 'readonly');
-                const req = tx.objectStore(STORE_NAME).get(userId);
-                req.onsuccess = () => res(req.result);
-                req.onerror = () => res(null);
-            });
+            if(!usePlguin){
+                const cached = await window.THREADS_DB_CENTER.getProfile(userId);
 
-            const now = Date.now();
-            const isFresh = cached && (now - cached.timestamp < ONE_WEEK);
+                const now = Date.now();
+                const isFresh = cached && (now - cached.timestamp < ONE_WEEK);
 
-            if (isFresh) {
-                renderUI(scope, cached);
-                hideBadge(scope);
-                continue;
+                if (isFresh) {
+                    renderUI(scope, cached,usePlguin);
+                    hideBadge(scope);
+                    continue;
+                }
+
+                if (cached && !isFresh) renderUI(scope, cached,usePlguin, true);
             }
-
-            if (cached && !isFresh) renderUI(scope, cached, true);
 
             const badge = scope.querySelector('[class*="threads-"][title]');
             const container = img.parentElement?.parentElement;
@@ -103,19 +78,20 @@
             const title = badge?.title || "";
             const content = badge?.innerText || "";
 
-            // 🎯 從 FetchMap 取資料
-            if (window.THREADS_LST_FD.has(userId)) {
-                const fData = window.THREADS_LST_FD.getUserData(userId);
-                const location = fData.location;
-                const finalData = { userId, joined: fData.joined, location: `${location}`, timestamp: Date.now(),usernumber: fData.usernumber};
-                db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).put(finalData);
-                window.THREADS_LST_FD.deleteUser(userId);
-                console.log(`[📦 移除Fetch暫存] 帳號: ${userId}`);
-                renderUI(scope, finalData);
-                hideBadge(scope);
-                continue;
+            if(!usePlguin){
+                // 🎯 從 FetchMap 取資料
+                if (window.THREADS_LST_FD.has(userId)) {
+                    const fData = window.THREADS_LST_FD.getUserData(userId);
+                    const location = fData.location;
+                    const finalData = { userId, joined: fData.joined, location: `${location}`, timestamp: Date.now(),usernumber: fData.usernumber};
+                    await window.THREADS_DB_CENTER.saveProfile(finalData);
+                    window.THREADS_LST_FD.deleteUser(userId);
+                    console.log(`[📦 移除Fetch暫存] 帳號: ${userId}`);
+                    renderUI(scope, finalData,usePlguin);
+                    hideBadge(scope);
+                    continue;
+                }
             }
-
             // 🎯 觸發點擊 (如果沒資料且不在等待中)
             if (!isWaiting) {
                 if (container) {
@@ -131,8 +107,21 @@
         const badge = scope.querySelector('[class*="threads-"][title]');
         const img = scope.querySelector('img');
         const container = img?.parentElement?.parentElement;
-        if (!badge || !container || badge.dataset.cakeStatus === "loading") return;
+        const title = badge?.title || "";
+        const content = badge?.innerText || "";
 
+        if (!badge || !container || badge.dataset.cakeStatus === "loading") return;
+        if (title.includes("加入時間") && !content.includes("⏳")) {
+            console.log('plugin 已存資料，無法fetch，用plugin資料顯示。');
+            const data = {
+                userId,
+                joined: title.replace(/^.*•\s*|加入時間[:：]\s*|\(.*\)/g, '').trim(),
+                location: content.replace("⏳", "").replace("[新帳號]", "").trim(),
+                timestamp: Date.now()
+            };
+            renderUI(scope, data,true);
+            return;
+        }
         console.log(`[🚀] 觸發點擊獲取: ${userId}`);
         container.setAttribute('data-cake-date', "⏳");
         badge.dataset.cakeStatus = "loading";
@@ -155,12 +144,12 @@
         return new Date(cleanStr).getTime();
     }
 
-    function renderUI(scope, data, isStale = false) {
+    function renderUI(scope, data,usePlguin, isStale = false) {
         const img = scope.querySelector('img');
         const container = img?.parentElement?.parentElement;
         if (!container) return;
 
-        let display = (getTimestampFromMonth("2025年12月") - getTimestampFromMonth(data.joined) <= 0) ? `🔍\n${data.joined}` : `📅\n${data.joined}`;
+        let display = (getTimestampFromMonth("2025年12月") - getTimestampFromMonth(data.joined) <= 0) ? `🔍\n${data.joined}` : `${(usePlguin?"[📅]":"📅")}\n${data.joined}`;
         display += (data.location === "未分享") ? `\n🫥未分享` : `\n${window.THREADS_LST_FD.getFlagEmoji(data.location) +" "+ data.location}`;
 
 
@@ -232,11 +221,11 @@
         if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
-    initDB().then(() => {
+    doSmartSync().then(() => {
         const style = document.createElement('style');
         style.textContent = `
             @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
-            [class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
+            //[class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
             .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
             .cake-avatar-anchor::after {
                 content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
