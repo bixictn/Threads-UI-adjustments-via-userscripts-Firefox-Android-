@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.2.8.4
+// @version      0.3.0
 // @description  Lee-su-Threads save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -10,7 +10,7 @@
 
 (function() {
     'use strict';
-    const version='v0.2.8';
+    const version='v0.3.0';
     const db_version=1;
     const ZIpanel=3,ZIbtn=4,ZIpgb=2;
     let caller=false;
@@ -173,17 +173,58 @@
 
     const DB_NAME = 'ThreadsProfileDB';
     const STORE_NAME = 'profilecache';
-    let panel = null;
-    let overlay = null; // 新增遮罩層變數
-    let importMode = 'normal';
 
-    const locFix = {"台灣":"🇹🇼 台灣","香港":"🇭🇰 香港","澳門":"🇲🇴 澳門","中國":"🇨🇳 中國","日本":"🇯🇵 日本","韓國":"🇰🇷 韓國","美國":"🇺🇸 美國","加拿大":"🇨🇦 加拿大","澳洲":"🇦🇺 澳洲","英國":"🇬🇧 英國"};
+    window.THREADS_DB_CENTER = {
+        // 儲存資料
+        saveProfile: async (data) => {
+            const db = await getDB(); // 使用你現有的 getDB
+            return new Promise((res, rej) => {
+                const tx = db.transaction([STORE_NAME], 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
 
-    const getDB = () => new Promise(res => {
-        const req = indexedDB.open(DB_NAME, db_version);
-        req.onsuccess = () => res(req.result);
-        req.onerror = () => console.error("DB Open Error");
-    });
+                // 統一結構：userId 是文字帳號，usernumber 是數字 ID
+                const entry = {
+                    userId: data.userId,
+                    usernumber: data.usernumber,
+                    joined: data.joined,
+                    location: data.location,
+                    timestamp: Date.now()
+                };
+
+                const req = store.put(entry); // keyPath 已設為 userId
+                req.onsuccess = () => res(true);
+                req.onerror = () => rej(req.error);
+            });
+        },
+
+        // 讀取資料
+        getProfile: async (userId) => {
+            const db = await getDB();
+            return new Promise((res) => {
+                const tx = db.transaction([STORE_NAME], 'readonly');
+                const req = tx.objectStore(STORE_NAME).get(userId);
+                req.onsuccess = () => res(req.result);
+                req.onerror = () => res(null);
+            });
+        }
+    };
+
+    const getDB = () => {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, db_version);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                let store = db.objectStoreNames.contains(STORE_NAME) ?
+                    e.target.transaction.objectStore(STORE_NAME) :
+                db.createObjectStore(STORE_NAME, { keyPath: 'userId' });
+                if (!store.indexNames.contains('timestamp')) {
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+            };
+            request.onsuccess = () => { resolve(request.result); };
+            request.onerror= () => console.error("DB Open Error");
+        });
+    };
 
     const getStats = async () => {
         try {
@@ -241,6 +282,33 @@
         }
     };
 
+    const deleteSingleData = async (uid) => {
+        try {
+            const db = await getDB();
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+
+            const req = store.delete(uid); // 執行刪除
+
+            req.onsuccess = async () => {
+                console.log(`✅ 已刪除: ${uid}`);
+                // 重新讀取統計資訊並更新 UI
+                const newStats = await getStats();
+                updatePanelUI(newStats);
+            };
+
+            req.onerror = (err) => {
+                console.error("❌ 刪除失敗:", err);
+            };
+        } catch (err) {
+            console.error("🔴 刪除發生錯誤:", err);
+        }
+    };
+
+    let panel = null;
+    let overlay = null; // 新增遮罩層變數
+    let importMode = 'normal';
+
     // --- 強力捲動鎖定函數 ---
     const preventDefault = (e) => {
         // 如果不是在 Panel 內部的捲動，就攔截
@@ -283,14 +351,28 @@
                 <div style="padding:10px;border-radius:8px;margin-bottom:8px;">
                     <div style="font-weight:bold;font-size:12px;">
                         <a href="/@${item.userId}" style="text-decoration:none;" target="_blink">${item.userId}</a>
+
                     </div>
                     <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                        <span style="color:#999;font-size:11px;">📅 ${item.joined}</span>
-                        <span style="color:#FFF;font-size:11px;">📍 ${item.location}</span>
+                        <div><span style="color:#999;font-size:11px;">📅 ${item.joined}</span>
+                         <button class="btn-delete-single" data-userid="${item.userId}"
+                        style="background:transparent;color:#ff4d4d;border:1px solid #ff4d4d;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;">
+                        🗑️
+                    </button></div>
+                        <span style="color:#FFF;font-size:11px;">📍 ${window.THREADS_LST_FD.getFlagEmoji(item.location)+" "+item.location}</span>
                     </div>
                 </div>
             `).join('') || '<div style="color:#666;text-align:center;">暫無資料</div>';
         }
+
+        list.querySelectorAll('.btn-delete-single').forEach(btn => {
+            btn.onclick = async (e) => {
+                const uid = e.currentTarget.getAttribute('data-userid');
+                if (confirm(`確定要刪除 ${uid} 的快取嗎？`)) {
+                    await deleteSingleData(uid);
+                }
+            };
+        });
     };
 
     const showPanel = async () => {
@@ -330,13 +412,14 @@
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid rgba(128,128,128,0.2);padding-bottom:10px;">
-                <span style="font-weight:bold;">📂 資料中心 ${version}</span>
+                <span style="font-weight:bold;">📂</span><span> 資料中心 ${version}</span>
+                <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
+                    <div style="font-size:11px;opacity:0.6;">目前總人數</div>
+                    <div class="db-count" style="font-size:16px;font-weight:bold;">${stats.count.toLocaleString()}</div>
+                </div>
                 <span id="close-panel-x" style="font-size:16px;cursor:pointer;opacity:0.5;">✕</span>
             </div>
-            <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
-                <div style="font-size:11px;opacity:0.6;">目前總人數</div>
-                <div class="db-count" style="font-size:16px;font-weight:bold;">${stats.count.toLocaleString()}</div>
-            </div>
+
             <div id="idb-list-content" style="max-height:150px;overflow-y:auto;margin-bottom:15px;"></div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -410,7 +493,6 @@
                         Object.entries(json).forEach(([uid, val], index) => {
                             existingKeys.has(uid) ? updatedItems++ : newItems++;
                             let loc = val.location;
-                            if (locFix[loc]) loc = locFix[loc];
                             store.put({ userId: uid, joined: val.joined, location: loc, timestamp: val.timestamp || (Date.now() + index) });
                         });
                     } else {
@@ -449,7 +531,7 @@
         if (!btn) {
             btn = document.createElement('div');
             btn.id = 'threads-idb-mini-btn';
-            btn.innerHTML = '📊';            
+            btn.innerHTML = '📊';
             btn.onclick = () => panel ? closePanel() : showPanel();
             (document.body || document.documentElement).appendChild(btn);
         } else {
