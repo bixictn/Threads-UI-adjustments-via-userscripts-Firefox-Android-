@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.8.5
+// @version      0.9.8.6
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -13,6 +13,7 @@
     'use strict';
     const ZImenu=8,ZIdialog=7,ZIbg=5;
     const replylist=[];
+    let blackouttime=false;
 
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
@@ -152,6 +153,13 @@
     //毛玻璃布幕---Start
     function showBlackout() {
         blackoutDiv.style.display = 'flex';
+        blackouttime=true;
+        setTimeout(()=>{
+            if(blackouttime){
+                console.log('強制關閉');
+                hideBlackout();
+            }
+        },8000);
     }
 
     function hideBlackout() {
@@ -161,6 +169,7 @@
             pageZero.style.setProperty('opacity', '1', 'important');
         }
         blackoutDiv.style.display = 'none';
+        blackouttime=false;
     }
     //毛玻璃布幕---End
 
@@ -473,12 +482,14 @@
 
     //navigation --- start
     function updateNavActiveState() {
-        const windowWidth = window.innerWidth;
-        if(windowWidth > 695){
-            const firsthtmldiv = document.querySelector('div[class*="html-div"');
-            if(firsthtmldiv){
-                const headerbar=firsthtmldiv.parentElement?.parentElement;
-                headerbar.style.setProperty("width","fit-content","important");
+
+        if(window.THREADS_PWA){
+            if(!window.THREADS_PWA.checkIsMobile()){
+                const firsthtmldiv = document.querySelector('div[class*="html-div"');
+                if(firsthtmldiv){
+                    const headerbar=firsthtmldiv.parentElement?.parentElement;
+                    headerbar.style.setProperty("width","fit-content","important");
+                }
             }
         }
 
@@ -498,11 +509,14 @@
                 }
             }
 
-            const href = link.getAttribute('href');
+            let href = link.getAttribute('href');
+
             if(!href)return;
+            if(href.split('/').length>2 && href.endsWith("/"))href=href.substring(0,href.length-1);
+
             const hrefnode=href.split('/'),currentPathnode=currentPath.split('/');
             const isActive = (href === currentPath) ||
-                  (currentPath === '/' && href === '/') ||
+                  (currentPath === '/' && href === '/') || (href.indexOf('messages')>0 && currentPath.indexOf('messages')>0) ||
                   (href && href !== '/' && currentPath.startsWith(href) && hrefnode.length===currentPathnode.length);
             if (isActive) {
                 link.setAttribute('data-active', 'true');
