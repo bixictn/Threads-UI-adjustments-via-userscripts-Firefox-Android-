@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8.5
+// @version      0.4.8.6
 // @description  Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -20,7 +20,7 @@
 
     async function doSmartSync() {
         if (!window.THREADS_PWA?.isStartTouch)return;
-        const usePlguin=(window.THREADS_DB_CENTER)?false:true;
+        const usePlugin=(window.THREADS_DB_CENTER)?false:true;
 
         const articles = document.querySelectorAll('[data-pressable-container="true"]');
 
@@ -35,19 +35,18 @@
             const userId = href.replace(/^\/@?/, '').split('/')[0];
             if(!isInViewport(userLink))continue;
 
-            if(!usePlguin){
+            if(!usePlugin){
                 const cached = await window.THREADS_DB_CENTER.getProfile(userId);
-
                 const now = Date.now();
                 const isFresh = cached && (now - cached.timestamp < ONE_WEEK);
 
                 if (isFresh) {
-                    renderUI(scope, cached,usePlguin);
+                    renderUI(scope, cached,usePlugin);
                     hideBadge(scope);
                     continue;
                 }
 
-                if (cached && !isFresh) renderUI(scope, cached,usePlguin, true);
+                if (cached && !isFresh) renderUI(scope, cached,usePlugin, true);
             }
 
             const badge = scope.querySelector('[class*="threads-"][title]');
@@ -78,7 +77,7 @@
             const title = badge?.title || "";
             const content = badge?.innerText || "";
 
-            if(!usePlguin){
+            if(!usePlugin){
                 // 🎯 從 FetchMap 取資料
                 if (window.THREADS_LST_FD.has(userId)) {
                     const fData = window.THREADS_LST_FD.getUserData(userId);
@@ -87,7 +86,7 @@
                     await window.THREADS_DB_CENTER.saveProfile(finalData);
                     window.THREADS_LST_FD.deleteUser(userId);
                     console.log(`[📦 移除Fetch暫存] 帳號: ${userId}`);
-                    renderUI(scope, finalData,usePlguin);
+                    renderUI(scope, finalData,usePlugin);
                     hideBadge(scope);
                     continue;
                 }
