@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Twemoji Replacer
-// @version       0.9.3.3
+// @version       0.9.3.5
 // @description   Twemoji Replacer
 // @author        Gemini
 // @match         *://*/*
@@ -110,7 +110,15 @@
     }
     // --- 3. 核心置換邏輯 ---
     function replaceEmojis(target) {
-        if (!target || (target.nodeType === 1 && target.closest('.tw-p-lock'))) return;
+        if (!target || (target.nodeType === 1 && target.closest('.tw-p-lock')) ) return;
+        const EXCLUDE_SELECTOR = [
+            '[aria-label="表情符號選擇工具"]',
+            '[role="presentation"]', // 通常是背景遮罩或動畫層
+            '.html-editor-placeholder', // 輸入框的提示文字
+            '[contenteditable="true"]' // 正在編輯中的文字區域
+        ].join(',');
+
+        if (target.nodeType === 1 && target.closest(EXCLUDE_SELECTOR)) return;
 
         const parent = target.parentNode;
         if (!parent) return;
@@ -118,10 +126,23 @@
         const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
         let n;
+
         while (n = walker.nextNode()) {
-            if (n.parentElement?.closest('script, style, textarea, .tw-p-lock, .threads-profile-info-badge')) continue;
+            // 2. 修正重點：文字節點必須透過 parentElement 檢查是否在排除區域內
+            const parentEl = n.parentElement;
+            if (!parentEl) continue;
+
+            if (
+                parentEl.closest('script, style, textarea, .tw-p-lock, .threads-profile-info-badge') ||
+                parentEl.closest(EXCLUDE_SELECTOR)
+            ) {
+                continue;
+            }
+
             EMOJI_REGEX.lastIndex = 0;
-            if (EMOJI_REGEX.test(n.nodeValue || "")) nodes.push(n);
+            if (EMOJI_REGEX.test(n.nodeValue || "")) {
+                nodes.push(n);
+            }
         }
 
         for (const node of nodes) {
