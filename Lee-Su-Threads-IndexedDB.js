@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Lee-su-Threads save to IndexedDB
-// @version      0.3.0
+// @version      0.3.1
 // @description  Lee-su-Threads save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -10,7 +10,7 @@
 
 (function() {
     'use strict';
-    const version='v0.3.0';
+    const version='v0.3.1';
     const db_version=1;
     const ZIpanel=3,ZIbtn=4,ZIpgb=2;
     let caller=false;
@@ -53,21 +53,20 @@
 			width: 24px !important;
 			height: 24px !important;
 			position:fixed!important;
-			border-radius:50%!important;
 			display:flex!important;
 			align-items:center!important;
 			justify-content:center!important;
 			font-size:18px!important;
 			cursor:pointer!important;
 			z-index:${ZIbtn} !important;
-			backdrop-filter:blur(4px);
+            filter: sepia(1) saturate(5) hue-rotate(10deg);
 		}
 
 		/* 當螢幕寬度小於 695px 時（自動判定為行動版） */
 		@media screen and (max-width: 695px) {
 			#threads-idb-mini-btn {
 				top: 14px !important;
-				left: 25% !important;
+				left: 63% !important;
 				width: 32px !important;
 				height: 32px !important;
 			}
@@ -92,23 +91,12 @@
 			border: 2px solid #D4AF37 !important;
 			color: #FFFFFF !important;
 			box-shadow: 0 15px 50px rgba(0,0,0,0.9) !important;
-		}
-		.__fb-dark-mode #threads-idb-mini-btn {
-			background-color: rgba(16,16,16,0.9) !important;
-			border: 1.5px solid #D4AF37 !important;
-			color: #D4AF37 !important;
-		}
+		}		
 
 		/* --- 2. 亮色模式樣式 --- */
 		.__fb-light-mode #threads-idb-data-panel {
 			background: #FFFFFF !important;
 			border: 2px solid #D4AF37 !important;
-			color: #000000 !important;
-			box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
-		}
-		.__fb-light-mode #threads-idb-mini-btn {
-			background-color: rgba(250, 250, 250, 0.9) !important;
-			border: 1.5px solid #D4AF37 !important;
 			color: #000000 !important;
 			box-shadow: 0 0 12px rgba(212, 175, 55, 0.8) !important;
 		}
@@ -412,14 +400,13 @@
 
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid rgba(128,128,128,0.2);padding-bottom:10px;">
-                <span style="font-weight:bold;">📂</span><span> 資料中心 ${version}</span>
-                <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
-                    <div style="font-size:11px;opacity:0.6;">目前總人數</div>
-                    <div class="db-count" style="font-size:16px;font-weight:bold;">${stats.count.toLocaleString()}</div>
-                </div>
-                <span id="close-panel-x" style="font-size:16px;cursor:pointer;opacity:0.5;">✕</span>
+                <span style="font-weight:bold;"> 📂資料中心 ${version}</span>
+                <span id="close-panel-x" style="font-size:16px;cursor:pointer;opacity:0.5;">[✕]</span>
             </div>
-
+            <div style="text-align:center;padding:10px;border-radius:10px;margin-bottom:15px;">
+                <div style="font-size:11px;opacity:0.6;">目前總人數</div>
+                <div class="db-count" style="font-size:16px;font-weight:bold;">${stats.count.toLocaleString()}</div>
+            </div>
             <div id="idb-list-content" style="max-height:150px;overflow-y:auto;margin-bottom:15px;"></div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
