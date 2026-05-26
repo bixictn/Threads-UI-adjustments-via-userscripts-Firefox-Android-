@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.2.9
+// @version      0.3.1
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -13,10 +13,11 @@
     'use strict';
     let lastPath = window.location.pathname;
     let targetScrollY = 0;
-    let scrollHistory = {}, replylist=[];
+    let scrollHistory = {}, replylist= new Set(),replylength=0;
     const TAG = "#pwa_guard";
     const SESSION_KEY = "pwa_guard_session_console.loged";
     let isDeployed = false,debug=false;
+    let isPanelVisible = false;
 
     const state = {
         isPageChange: false,
@@ -34,8 +35,10 @@
         toTopActive: () => { if(debug)console.log('other js have to top');toTop(); },
         setLastPath: (path) => {lastPath=path;},
         setDMAction: (dma) =>{if(debug)console.log('other js have to '+dma+' DMAction');state.isDMAction=dma;state.userDMAction=dma},
-        get getLastPath() { return lastPath; }, 
-        get isBackAction() { return state.isBackAction; } 
+        get getLastPath() { return lastPath; },
+        get isBackAction() { return state.isBackAction; },
+        get isStartTouch() { return state.isStartTouch; },
+        checkIsMobile: () =>{checkIsMobile();}
     };
 
     function toTop(){
@@ -61,7 +64,7 @@
         state.isStartTouch=false;
 
         if(state.isMediaAction){
-            state.isMediaAction=false;
+            state.isMediaAction=false;           
             return;
         }
         if(!state.isBackAction)state.isBackAction=true;
@@ -73,7 +76,7 @@
             lastPath=currentPath;
             state.isPageChange=true;
         }
-        state.userDMAction=state.isBackAction && state.isInterval;
+        //state.userDMAction=state.isBackAction && state.isInterval;
         if(debug) console.log('modify popstate:PageChange -> '+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+' : is Media -> '+state.isMediaAction);
 
         if (state.userDMAction && !state.isDMAction) {
@@ -85,36 +88,31 @@
 
         }
 
-
-        window.THREADS_UI.ActiveShowBlackout();
-
         const menu = document.querySelector('[role="menu"]');
-        const dialog = document.querySelector('[role="dialog"]');
 
-        if (state.isDMAction) {
-            window.THREADS_UI.ActiveHideBlackout();
-            if (menu) {
-                closeDialogPopupMenu();
-                if(debug) console.log('攔截：關閉 PopupMenu');
-                state.isDMAction=false;
+        const replay = document.querySelector('[aria-hidden="false"]');
+        if(replay && state.isBackAction){
+            if(debug)console.log(checkIsMobile());
+            if (closeReplyDialog(e)) {
+                if(debug) console.log('D攔截：關閉 Dialog=====:'+replylist.size);
+                e.stopImmediatePropagation();
                 return;
-            }
-
-            if (dialog) {
-                if (closeReplyDialog()) {
-                    if(debug) console.log('攔截：關閉 Dialog');
-                    state.isDMAction=false;
-                    return; 
-                }
             }
         }
         else{
+            if (state.isDMAction && state.isBackAction) {              
+                if (menu) {
+                    if(!checkIsMobile()) closeDialogPopupMenu();
+                    if(debug) console.log('攔截：關閉 PopupMenu');                  
+                    isPanelVisible=false;
+                    e.stopImmediatePropagation();
+                    return;
+                }
+            }
             checkPath(currentPath,e);
             deepCleanEmojiMemory()
+            setScrollLocation(currentPath,e);
         }
-
-        setScrollLocation(currentPath,e);
-
     },true);
 
     function setScrollLocation(currentPath,e){
@@ -135,11 +133,13 @@
                 state.userDMAction=false;
                 state.isMediaAction=false;
                 state.isPageChange = false;
+
             }, 300);
             return;
         }
-        const targetY = (state.isBackAction || state.isDMAction || state.isMediaAction || state.isInterval) ? savedPos : 0;
-        state.isBackAction = true;
+
+        const targetY = (state.isPageChange || state.isBackAction || state.isDMAction || state.isMediaAction || state.isInterval) ? savedPos : 0;
+        //state.isBackAction = true;
         state.isInterval = true;
 
         if(debug)console.log(`[Start] 準備捲動至: ${targetY} (Path: ${currentPath})`);
@@ -173,7 +173,7 @@
                 state.isDMAction=false;
                 state.userDMAction=false;
                 state.isMediaAction=false;
-                state.isPageChange = false;
+                state.isPageChange = false;              
             }, 300);
         });
 
@@ -181,7 +181,7 @@
 
     function executeAfterScroll(targetY, callback) {
         let attempts = 0;
-        const maxAttempts = 60; 
+        const maxAttempts = 60;
 
         const check = () => {
             const currentY = window.scrollY;
@@ -222,20 +222,12 @@
             else{
                 if(debug)console.log('to Logo');
                 clickLogo();
-
+                return;
             }
-            window.THREADS_UI.ActiveHideBlackout();
+            if (window.THREADS_UI) window.THREADS_UI.ActiveHideBlackout();
         }
     }
 
-    function clickLogo(){
-        const logo = document.getElementById('barcelona-header');
-        const alink = logo.querySelector('a[href="/"][role="link"]');
-
-        if(alink && state.isInterval){
-            toClick(alink);
-        }
-    }
     function deepCleanEmojiMemory() {
         if(debug)console.log("Threads UI Adj: 執行深層記憶體清理...");
 
@@ -260,11 +252,16 @@
 
     function DialogPopupMenuOpen(el) {
         if (history.state?.type === `${el}_open`) return;
-        const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
 
         if(checkIsMobile()) {
-            history.replaceState({ type: `${el}_open` }, '');
-            if(debug) console.log(`📱 [手機版] 僅標記當前狀態，不推入新紀錄: ${el}`);
+            if(el.includes('reply')){
+                history.pushState({ type: `${el}_open` }, '');
+                if(debug) console.log(`📱 [手機版] 推入虛擬紀錄: ${el}`);
+            }
+            else{
+                history.replaceState({ type: `${el}_open` }, '');
+                if(debug) console.log(`📱 [手機版] 僅標記當前狀態，不推入新紀錄: ${el}`);
+            }
         }
         else {
             history.pushState({ type: `${el}_open` }, '');
@@ -275,7 +272,9 @@
 
     function checkIsMobile() {
         const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+
         const isMobileUA = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
 
         return hasCoarsePointer || isMobileUA;
     }
@@ -292,36 +291,54 @@
         });
 
         document.dispatchEvent(escEvent);
-        if(debug) console.log('關閉選單');
+        if(debug) console.log('click esc 關閉選單');
     }
 
-    function closeReplyDialog() {
-        const cancelButton = Array.from(document.querySelectorAll('div[role="button"]'))
+    function closeReplyDialog(e) {
+        const other = document.querySelector('[aria-hidden="false"]');
+        const checkother = other.querySelector('[aria-label="返回"]');
+        const cancelButton = checkother?checkother:Array.from(other.querySelectorAll('div[role="button"]'))
         .find(el => el.innerText === '取消' || el.textContent === '取消');
 
         if (cancelButton) {
             toClick(cancelButton);
+            replylist.delete(cancelButton);
+            if(replylist.size===0)isPanelVisible=false;
+            e.stopImmediatePropagation();
             return true;
         }
-
-        const sv = document.getElementById('scrollview');
-        if (sv) {
-            const backdrop = document.elementFromPoint(10, 10);
-            if (backdrop) {
-                toClick(backdrop);
-                return true;
-            }
+        else{
+            closeDialogPopupMenu();
+            e.stopImmediatePropagation();
+            return true;
         }
         return false;
     }
 
+    function clickLogo(){
+        const logos = document.querySelectorAll('[aria-label="Threads"');;
+        const logo = (logos.length>1)?logos[1]:logos[0];
+        if (!logo) return;
+        const alink = logo.closest('a[href="/"][role="link"]');
+        if(alink && !state.isInterval){
+            if(debug) console.log('嘗試點擊 Logo 觸發首頁刷新...');
+
+            toClick(alink);
+
+        }
+    }
+
     function toClick(el){
-        const clickEvent = new MouseEvent('click', {
-            view: window,
-            bubbles: true,
-            cancelable: true
+
+        ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evtType => {
+            const clickEvent = new MouseEvent(evtType, {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                buttons: evtType.includes('down') ? 1 : 0
+            });
+            el.dispatchEvent(clickEvent);
         });
-        el.dispatchEvent(clickEvent);
         if(debug) console.log(el.innerHTML+'clicked');
     }
 
@@ -329,7 +346,8 @@
         if (window.location.pathname !== "/") return;
         if (window.location.hash.includes(TAG)) return;
         if (!sessionStorage.getItem(SESSION_KEY)) {
-            if(checkIsMobile())alert('加強返回鍵!!!')
+            if(checkIsMobile())alert('加強返回鍵!!!');
+            
             sessionStorage.setItem(SESSION_KEY, "true");
         };
 
@@ -345,8 +363,12 @@
         window.addEventListener(evt, () => {
             state.isStartTouch = true;
             if (!isDeployed) doDeploy();
-        }, { passive: true });
+        }, { passive: true, capture: true });
     });
+
+    window.addEventListener('mousemove', () => {
+        state.isStartTouch = true;
+    }, { passive: true, capture: true });
 
     const rawBack = history.back;
     history.back = function() {
@@ -363,7 +385,7 @@
         const currentPath = window.location.pathname;
         if(debug) console.log('nowpage:'+currentPath+'\nlastpage:'+lastPath);
         if(lastPath !== currentPath){
-            window.THREADS_UI.ActiveShowBlackout();
+            if (window.THREADS_UI) window.THREADS_UI.ActiveShowBlackout();
             if(currentPath.endsWith('/'))delete scrollHistory[currentPath];
             lastPath = currentPath;
             state.isPageChange=true;
@@ -375,69 +397,125 @@
         }
         if(debug) console.log('modify pushstate:PageChange:'+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+':'+state.isStartTouch);
         isDeployed = false;
+        if(isPanelVisible)state.isStartTouch=true;       
     };
 
     const pwaObserver = new MutationObserver((mutations) => {
+        const currentPath = window.location.pathname;
+        const reply = document.querySelector('[aria-hidden="false"]');
+        isPanelVisible=reply?true:false;
+        if(isPanelVisible)state.isStartTouch=true;
+        else replylist.clear();
 
-        const currentPath=window.location.pathname;
-        if(!state.isStartTouch || state.isMediaAction)return;
-        if(currentPath.endsWith('/media')){
-            state.isMediaAction=true;
+        if (!state.isStartTouch || state.isMediaAction ) {
             return;
         }
 
-        const uiElements = document.querySelectorAll('[role="menu"], [role="dialog"]');
-        const node = document.querySelectorAll('[class*="__fb"]');
-        const mode = (checkIsMobile)?1:2;
-        if(debug) if(node.length>mode)console.log("DM node:"+(node.length-1)+'***'+uiElements.length+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
+        if (currentPath.endsWith('/media')) {
+            state.isMediaAction = true;
+            return;
+        }
 
-        if (!state.isDMAction) {
-            for (const el of uiElements) {
-                const style = window.getComputedStyle(el);
-                if(debug) console.log("check DM node:"+(node.length-1)+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
-                const role = el.getAttribute('role');
+        
+        let activePanelType = null;
 
-                const isVisible = style.opacity !== "0" && style.visibility !== "hidden" && style.display !== "none";
-                if (!isVisible) continue;
+        if (reply) {
+            if(debug)console.log('reply showing');
+            activePanelType = 'reply'+reply.querySelectorAll('*').length;
+            const other = document.querySelector('[aria-hidden="false"]');
+            const checkother = other.querySelector('[aria-label="返回"]');
+            const cancelButton = checkother?checkother:Array.from(other.querySelectorAll('div[role="button"]'))
+            .find(el => el.innerText === '取消' || el.textContent === '取消');
 
-                const hasHeight = el.offsetHeight > 0 || el.getBoundingClientRect().height > 0;
-                const isMobileModal = role === 'dialog' && el.getAttribute('aria-modal') === 'true';
+            if(!replylist.has(cancelButton) && cancelButton){
+                replylist.add(cancelButton);
+            }
 
-                if (!hasHeight && !isMobileModal) continue;
+            if(replylength!==replylist.size){
+                replylength=replylist.size;
+                state.isDMAction = false;
+            }
+        }
+        else{       
 
-                // --- 條件 C：過濾空殼提示框 ---
-                const isRealMenu = el.querySelector('[role="menuitem"]') || el.innerText.length > 2;
-                if (!isRealMenu) continue;
+            const node = document.querySelectorAll('[class*="__fb"]');
+            if(node.length<=1)return;
+            const uiElements = node[1].querySelectorAll(`
+                [role="menu"],
+                [role="dialog"]
+            `);
+            if(!uiElements)return;
 
-                // --- 執行區：確定是「有效選單」 ---
+
+            const mode = (checkIsMobile)?1:2;
+            if(debug) if(node.length>mode)console.log("DM node:"+(node.length-1)+'***'+uiElements.length+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
+
+            if (!state.isDMAction) {
+                console.log('no reply');
+
+                for (const el of uiElements) {
+                    const style = window.getComputedStyle(el);
+                    if(debug) console.log("check DM node:"+(node.length-1)+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
+                    const role = el.getAttribute('role');
+
+                    const isVisible = style.opacity !== "0" && style.visibility !== "hidden" && style.display !== "none";
+                    if (!isVisible) continue;
+
+                    const hasHeight = el.offsetHeight > 0 || el.getBoundingClientRect().height > 0;
+                    const isMobileModal = role === 'dialog' && el.getAttribute('aria-modal') === 'true';
+
+                    if (!hasHeight && !isMobileModal) continue;
+
+                    // --- 條件 C：過濾空殼提示框 ---
+                    const isRealMenu = el.querySelector('[role="menuitem"]') || el.innerText.length > 2;
+                    if (!isRealMenu) continue;
+
+
+
+                    if (!el.dataset.backButtonHandled) {
+                        el.dataset.backButtonHandled = "true";
+                        const type = role === 'menu' ? 'popupmenu' : 'dialog';
+                        if(debug) console.log(`🎯 成功攔截顯示中的選單: ${type} (高度: ${hasHeight}, Modal: ${isMobileModal})`);
+                        isPanelVisible = true;
+                        activePanelType = type;
+                    }
+                }
+            }
+        }
+
+        if (isPanelVisible ) {
+            // 狀況 A：畫面上【有】面板，且腳本還沒記錄過 (剛打開)
+            if (!state.isDMAction) {
+                console.log('visible:'+activePanelType);
+                if (debug) console.log(`🎯 偵測到面板開啟: ${activePanelType}`);
                 state.isDMAction = true;
                 state.isInterval = true;
+                DialogPopupMenuOpen(activePanelType);
+            }
+        } else {
+            // 2. 同步清理：如果畫面選單消失了，重設狀態
+            if (state.isDMAction) {
+                if(debug) console.log('not visible, 準備同步清理紀錄');
+                if (history.state?.type?.endsWith('_open')) {
+                    if(debug) console.log('_close 觸發');
 
-                if (!el.dataset.backButtonHandled) {
-                    el.dataset.backButtonHandled = "true";
-                    const type = role === 'menu' ? 'popupmenu' : 'dialog';
-                    if(debug) console.log(`🎯 成功攔截顯示中的選單: ${type} (高度: ${hasHeight}, Modal: ${isMobileModal})`);
-                    DialogPopupMenuOpen(type);
+                    if (!state.isBackAction && !checkIsMobile()) {
+                        history.back();
+                    }
                 }
-                break;
+
+                state.isDMAction = false;
+                state.isBackAction = false;
+                state.userDMAction = false;
             }
         }
 
-        // 2. 同步清理：如果畫面選單消失了，重設狀態
-        if (state.isDMAction && !state.userDMAction && uiElements.length === 0) {
-            if(debug) console.log('DM dis:PageChange:'+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
-            if (history.state?.type?.endsWith('_open')) {
-                if(debug) console.log('_close');
-                history.back();
-            }
-        }
     });
 
     // 啟動監控
     pwaObserver.observe(document.documentElement, {
         childList: true,
         subtree: true,
-        attributes: true, 
-        attributeFilter: ['class', 'style']
-    });
+        attributes: true
+    }, { passive: true, capture: true });
 })();
