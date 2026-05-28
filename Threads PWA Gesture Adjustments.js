@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.3.1
+// @version      0.3.3
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -17,8 +17,7 @@
     const TAG = "#pwa_guard";
     const SESSION_KEY = "pwa_guard_session_console.loged";
     let isDeployed = false,debug=false;
-    let isPanelVisible = false;
-
+    let isPanelVisible = false, dialogthenpopmenu=false;
     const state = {
         isPageChange: false,
         isBackAction: false,
@@ -34,7 +33,7 @@
     window.THREADS_PWA = {
         toTopActive: () => { if(debug)console.log('other js have to top');toTop(); },
         setLastPath: (path) => {lastPath=path;},
-        setDMAction: (dma) =>{if(debug)console.log('other js have to '+dma+' DMAction');state.isDMAction=dma;state.userDMAction=dma},
+        setDMAction: (dma) =>{if(debug)console.log('other js have to '+dma+' DMAction');state.isDMAction=false;state.userDMAction=dma},
         get getLastPath() { return lastPath; },
         get isBackAction() { return state.isBackAction; },
         get isStartTouch() { return state.isStartTouch; },
@@ -54,6 +53,24 @@
         }
     }
 
+    function pwaGuard(currentPath){
+        setTimeout(() => {
+            if (currentPath === "/") {
+                if (!window.location.hash.includes(TAG)) {
+                    if(debug)console.log("🛡️ 抵達首頁，部署 PWA 防護罩");
+                    history.pushState({ pwa: "guard" }, "", currentPath + TAG);
+                }
+            }
+            state.isBackAction = false;
+            state.isInterval=false;
+            state.isDMAction=false;
+            state.userDMAction=false;
+            state.isMediaAction=false;
+            state.isPageChange = false;
+
+        }, 300);
+    }
+
     window.addEventListener('scroll', () => {
         if (state.isStartTouch) {
             scrollHistory[window.location.pathname] = window.scrollY;
@@ -64,7 +81,7 @@
         state.isStartTouch=false;
 
         if(state.isMediaAction){
-            state.isMediaAction=false;           
+            state.isMediaAction=false;
             return;
         }
         if(!state.isBackAction)state.isBackAction=true;
@@ -79,7 +96,7 @@
         //state.userDMAction=state.isBackAction && state.isInterval;
         if(debug) console.log('modify popstate:PageChange -> '+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+' : is Media -> '+state.isMediaAction);
 
-        if (state.userDMAction && !state.isDMAction) {
+        if (state.userDMAction) {
             if(debug)console.log('user DM Action!!!');
             setScrollLocation(currentPath,e);
 
@@ -93,25 +110,40 @@
         const replay = document.querySelector('[aria-hidden="false"]');
         if(replay && state.isBackAction){
             if(debug)console.log(checkIsMobile());
+
+            if(dialogthenpopmenu){
+                closeDialogPopupMenu();
+                if(debug) console.log('攔截：關閉 PopupMenu');
+                dialogthenpopmenu=false;
+                e.stopImmediatePropagation();
+                return;
+            }
+
             if (closeReplyDialog(e)) {
-                if(debug) console.log('D攔截：關閉 Dialog=====:'+replylist.size);
+                if(debug) console.log('攔截：關閉 Dialog=====:'+replylist.size);
                 e.stopImmediatePropagation();
                 return;
             }
         }
         else{
-            if (state.isDMAction && state.isBackAction) {              
+            if (state.isDMAction && state.isBackAction) {
                 if (menu) {
                     if(!checkIsMobile()) closeDialogPopupMenu();
-                    if(debug) console.log('攔截：關閉 PopupMenu');                  
+                    if(debug) console.log('攔截：關閉 PopupMenu');
                     isPanelVisible=false;
                     e.stopImmediatePropagation();
                     return;
                 }
             }
-            checkPath(currentPath,e);
+
+            if(checkPath(currentPath,e)){
+                pwaGuard(currentPath);
+                return;
+            }
+
             deepCleanEmojiMemory()
             setScrollLocation(currentPath,e);
+
         }
     },true);
 
@@ -120,21 +152,7 @@
 
         const savedPos = scrollHistory[currentPath];
         if(savedPos === undefined){
-            setTimeout(() => {
-                if (currentPath === "/") {
-                    if (!window.location.hash.includes(TAG)) {
-                        if(debug)console.log("🛡️ 抵達首頁，部署 PWA 防護罩");
-                        history.pushState({ pwa: "guard" }, "", currentPath + TAG);
-                    }
-                }
-                state.isBackAction = false;
-                state.isInterval=false;
-                state.isDMAction=false;
-                state.userDMAction=false;
-                state.isMediaAction=false;
-                state.isPageChange = false;
-
-            }, 300);
+            pwaGuard(currentPath);
             return;
         }
 
@@ -161,20 +179,7 @@
                 }
             }, 30);
 
-            setTimeout(() => {
-                if (currentPath === "/") {
-                    if (!window.location.hash.includes(TAG)) {
-                        if(debug)console.log("🛡️ 抵達首頁，部署 PWA 防護罩");
-                        history.pushState({ pwa: "guard" }, "", currentPath + TAG);
-                    }
-                }
-                state.isBackAction = false;
-                state.isInterval=false;
-                state.isDMAction=false;
-                state.userDMAction=false;
-                state.isMediaAction=false;
-                state.isPageChange = false;              
-            }, 300);
+            pwaGuard(currentPath);
         });
 
     }
@@ -210,22 +215,23 @@
             if(debug)console.log("🔙 返回首頁：保留原始位置");
             state.userDMAction=true;
             state.isInterval=false;
+            return false;
         }
         else if (isCurrentlyHome && !state.isPageChange ) {
             if(debug)console.log("check path:"+cPath+": BackAction:"+state.isBackAction+" DMAction:"+state.isDMAction+": MeidaAction:"+state.isMediaAction);
             if(window.scrollY>100){
                 if(debug)console.log("🔝 首頁再次返回：捲動回頂端");
                 scrollHistory[cPath]=0;
-                toTop();
-                e.stopImmediatePropagation();
+                return true;
             }
             else{
                 if(debug)console.log('to Logo');
                 clickLogo();
-                return;
+                return true;
             }
             if (window.THREADS_UI) window.THREADS_UI.ActiveHideBlackout();
         }
+        return false;
     }
 
     function deepCleanEmojiMemory() {
@@ -322,22 +328,20 @@
         const alink = logo.closest('a[href="/"][role="link"]');
         if(alink && !state.isInterval){
             if(debug) console.log('嘗試點擊 Logo 觸發首頁刷新...');
-
-            toClick(alink);
-
+            const targetElement = alink.querySelector('svg');
+            toClick(targetElement);
         }
     }
 
     function toClick(el){
-
         ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evtType => {
-            const clickEvent = new MouseEvent(evtType, {
+            const event = new MouseEvent(evtType, {
                 view: window,
                 bubbles: true,
                 cancelable: true,
                 buttons: evtType.includes('down') ? 1 : 0
             });
-            el.dispatchEvent(clickEvent);
+            el.dispatchEvent(event);
         });
         if(debug) console.log(el.innerHTML+'clicked');
     }
@@ -347,7 +351,7 @@
         if (window.location.hash.includes(TAG)) return;
         if (!sessionStorage.getItem(SESSION_KEY)) {
             if(checkIsMobile())alert('加強返回鍵!!!');
-            
+
             sessionStorage.setItem(SESSION_KEY, "true");
         };
 
@@ -374,7 +378,6 @@
     history.back = function() {
         state.userDMAction=true;
         if(debug) console.log('check back action: Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
-
         return rawBack.apply(this, arguments);
     };
 
@@ -416,24 +419,41 @@
             return;
         }
 
-        
+
         let activePanelType = null;
 
         if (reply) {
             if(debug)console.log('reply showing');
-            activePanelType = 'reply'+reply.querySelectorAll('*').length;
-            const other = document.querySelector('[aria-hidden="false"]');
-            const checkother = other.querySelector('[aria-label="返回"]');
-            const cancelButton = checkother?checkother:Array.from(other.querySelectorAll('div[role="button"]'))
-            .find(el => el.innerText === '取消' || el.textContent === '取消');
 
-            if(!replylist.has(cancelButton) && cancelButton){
-                replylist.add(cancelButton);
+            const node = document.querySelectorAll('[class*="__fb"]');
+            if(node.length<=1)return;
+
+            const popmenu = node[1].querySelector('[role="menu"]')
+            if(popmenu){
+                if (!popmenu.dataset.backButtonHandled) {
+                    popmenu.dataset.backButtonHandled = "true";
+                    const type = 'popupmenu';
+                    if(debug) console.log(`🎯 成功攔截顯示中的選單: ${type} `);
+                    dialogthenpopmenu = true;
+                    activePanelType = type;
+                }
             }
+            else{
 
-            if(replylength!==replylist.size){
-                replylength=replylist.size;
-                state.isDMAction = false;
+                activePanelType = 'reply'+reply.querySelectorAll('*').length;
+                const other = document.querySelector('[aria-hidden="false"]');
+                const checkother = other.querySelector('[aria-label="返回"]');
+                const cancelButton = checkother?checkother:Array.from(other.querySelectorAll('div[role="button"]'))
+                .find(el => el.innerText === '取消' || el.textContent === '取消');
+
+                if(!replylist.has(cancelButton) && cancelButton){
+                    replylist.add(cancelButton);
+                }
+
+                if(replylength!==replylist.size){
+                    replylength=replylist.size;
+                    state.isDMAction = false;
+                }
             }
         }
         else{       
@@ -478,15 +498,27 @@
                         if(debug) console.log(`🎯 成功攔截顯示中的選單: ${type} (高度: ${hasHeight}, Modal: ${isMobileModal})`);
                         isPanelVisible = true;
                         activePanelType = type;
+                        dialogthenpopmenu = true;
                     }
                 }
             }
         }
 
         if (isPanelVisible ) {
+            if(!activePanelType)return;
             // 狀況 A：畫面上【有】面板，且腳本還沒記錄過 (剛打開)
+            // panel visible, isDMAction, dialog then popmenu
+            // 1              0           0
+            // 1              1           0
+            // 1              1           1
             if (!state.isDMAction) {
-                console.log('visible:'+activePanelType);
+                if (debug) console.log(`🎯 偵測到面板開啟: ${activePanelType}`);
+                state.isDMAction = true;
+                state.isInterval = true;
+                DialogPopupMenuOpen(activePanelType);
+            }
+
+            if(state.isDMAction && dialogthenpopmenu){
                 if (debug) console.log(`🎯 偵測到面板開啟: ${activePanelType}`);
                 state.isDMAction = true;
                 state.isInterval = true;
