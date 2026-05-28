@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.8.6
+// @version      0.9.8.8
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -12,7 +12,6 @@
 (function() {
     'use strict';
     const ZImenu=8,ZIdialog=7,ZIbg=5;
-    const replylist=[];
     let blackouttime=false;
 
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
@@ -154,12 +153,18 @@
     function showBlackout() {
         blackoutDiv.style.display = 'flex';
         blackouttime=true;
+        const currentPath = window.location.pathname;
+        const currentPathnode = currentPath.split('/');
+        let limittime=3000;
+        if(currentPath.endsWith("/") && currentPathnode.length===1) limittime=8000;
+
+
         setTimeout(()=>{
             if(blackouttime){
                 console.log('強制關閉');
                 hideBlackout();
             }
-        },8000);
+        },limittime);
     }
 
     function hideBlackout() {
@@ -531,6 +536,8 @@
         document.querySelectorAll('span:not([data-obj-cleaned])').forEach(span => {
             let hasObj = false;
             span.childNodes.forEach(node => {
+                if(!node)return;
+
                 if (node.nodeType === 3 && node.nodeValue.includes('\uFFFC')) {
                     node.nodeValue = node.nodeValue.replace(/\uFFFC/g, '');
                     hasObj = true;
@@ -542,6 +549,8 @@
 
     //ReplyDialog option mobile version Adj --- Start
     function hrstyle() {//replay
+        const reply = document.querySelector('[aria-hidden="false"]');
+        if(!reply)return;
         const hrs = document.querySelectorAll('hr[class*="html-hr"]');
 
         if(!hrs)return;
@@ -566,35 +575,47 @@
             const currentPathnode = currentPath.split('/');
             if(!currentPath.includes('/@') && currentPathnode.length==2) hrp.style.setProperty("align-items", "center", "important");
 
-
+            console.log('fix hrpp');
             hrpp.style.setProperty("display", "flex", "important");
             hrpp.style.setProperty("flex-direction", "column", "important");
-            hrobserver.observe(hrpp);
-            updateHrppHeight(hrpp);
-            hrpp.style.setProperty("height", "auto", "important");
+            hrpp.style.setProperty("position", "fixed", "important");
+            hrpp.style.setProperty("width", "100%","important");
+            hrpp.style.setProperty("bottom","0px","important");
         }
     }
 
-    function updateHrppHeight(target) {
+    //messages
+    function modifyMessages(){
+        const currentPath = window.location.pathname;
+        if(currentPath.includes('/messages/')){
+            const layout=document.getElementById('barcelona-page-layout');
+            if(!layout)return;
+            const lss=layout.querySelector('div').querySelector('div')
+            lss.style.setProperty("margin-bottom", "0px","important");
+            lss.style.setProperty("top", "60px","important");
+            lss.style.setProperty("position", "fixed","important");
+            lss.style.setProperty("height",(window.innerHeight-110)+"px","important");
 
-        const rect = target.getBoundingClientRect();
-        const hasDecimal = rect.top % 1 !== 0; // 如果有餘數，代表有小數
-        if (hasDecimal && rect.top > 0 && rect.top < window.innerHeight && !replylist.includes(target)) {
-            let h = window.innerHeight - rect.top - 20;
-            target.style.setProperty("min-height", `${h}px`, "important");
-            if(h>50) {
-                replylist.push(target);
-            }
+            const pbtn=layout.querySelector('[href="/messages/"]');
+            const pbtnpp=pbtn.parentElement?.parentElement;
+
+            pbtnpp.style.setProperty("padding-right","25px","important");
+            pbtnpp.style.setProperty("padding-left","15px","important");
+
+            pbtnpp.parentElement.style.setProperty("min-height","65px","important");
+
+            const md=layout.querySelector('[data-lexical-editor]');
+            if(!md)return;
+            const mdpp=md.parentElement?.parentElement?.parentElement?.parentElement;
+            mdpp.style.setProperty("padding-top", "0px", "important");
+            mdpp.style.setProperty("padding-bottom", "0px", "important");
         }
     }
-    //ReplayDialog
 
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
         const check=document.querySelector('[data-pagelet="threads_feed_0"],[data-pagelet="threads_post_page_0"]');
-
-
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
@@ -602,6 +623,7 @@
         updateNavActiveState();
         cleanContent();
         hrstyle();
+        modifyMessages();
         emojiSize();
 
         if (currentPath.includes('/post/')) {
@@ -621,13 +643,7 @@
     }
 
     const observer = new MutationObserver(()=>{mainLoop();});
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-
-    const hrobserver = new IntersectionObserver(entries => {
-        for (let entry of entries) {
-            updateHrppHeight(entry.target);
-        }
-    }, { threshold: 0.3});
+    observer.observe(document.documentElement, { childList: true, subtree: true });    
 
     showBlackout();
 })();
