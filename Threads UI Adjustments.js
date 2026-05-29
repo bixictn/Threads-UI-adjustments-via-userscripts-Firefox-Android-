@@ -551,7 +551,7 @@
     function hrstyle() {//replay
         const reply = document.querySelector('[aria-hidden="false"]');
         if(!reply)return;
-        const hrs = document.querySelectorAll('hr[class*="html-hr"]');
+        const hrs = reply.querySelectorAll('hr[class*="html-hr"]');
 
         if(!hrs)return;
 
