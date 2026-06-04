@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID & Lee-Su-Threads
-// @version      0.4.8.6
+// @version      0.4.8.7
 // @description  Threads ID & Lee-Su-Threads
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -10,7 +10,20 @@
 
 (function() {
     'use strict';
-    const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
+        .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
+        .cake-avatar-anchor::after {
+            content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+            margin-top: 6px; color: #A0A0A0; font-size: 10px; white-space: pre; line-height: 1.1;
+            text-align: center; z-index: 10; pointer-events: none; width: max-content; display: block !important;
+        }
+        .cake-avatar-anchor[data-cake-date="⏳"]::after { animation: hourglass-flip 1s linear infinite !important; }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+
+    const days = 6 * 24 * 60 * 60 * 1000;
 
     // --- 3. 核心功能 ---
     function isInViewport(el) {
@@ -38,7 +51,7 @@
             if(!usePlugin){
                 const cached = await window.THREADS_DB_CENTER.getProfile(userId);
                 const now = Date.now();
-                const isFresh = cached && (now - cached.timestamp < ONE_WEEK);
+                const isFresh = cached && (now - cached.timestamp < days);
 
                 if (isFresh) {
                     renderUI(scope, cached,usePlugin);
@@ -154,7 +167,7 @@
 
         const now = Date.now();
         const joinedTs = getTimestampFromMonth(data.joined);
-        const TWO_MONTHS = ONE_WEEK * 8; // 約兩個月
+        const TWO_MONTHS = days * 10; // 約兩個月
 
         let nTs='70px';
         // 如果 (現在時間 - 加入時間) 小於 8 星期，就是新帳號
@@ -164,76 +177,131 @@
         }
         container.classList.add("cake-avatar-anchor");
         container.setAttribute('data-cake-date', display);
-
-        if (!container.querySelector('.cake-ig-link')) {
-            const igLink = document.createElement('a');
-            igLink.className = 'cake-ig-link';
-            igLink.href = `https://www.instagram.com/${data.userId}/`;
-            igLink.target = '_blank';
-            igLink.innerText = '📸 IG';
-
-            igLink.style.cssText = `
-                position: absolute;
-                top: ${nTs};
-                left: 50%;
-                transform: translateX(-50%); /* 水平居中 */
-                font-size: 12px;
-                z-index: 1000 !important;
-                cursor: pointer !important;
-                pointer-events: auto !important;
-                text-decoration: none;
-                padding: 2px 2px;
-                border-radius: 5px;
-                background: rgba(128, 128, 128, 0.1);
-                color: #A0A0A0;
-                white-space: nowrap;
-                transition: all 0.2s ease;
-                border: 1px solid transparent;
-            `;
-
-            // 💡 懸停效果：變彩色並加邊框
-            igLink.onmouseenter = () => {
-                igLink.style.background = 'rgba(214, 41, 118, 0.1)';
-                igLink.style.color = '#E1306C';
-                igLink.style.borderColor = 'rgba(214, 41, 118, 0.3)';
-                igLink.style.transform = 'translateX(-50%) scale(1.1)';
-            };
-            igLink.onmouseleave = () => {
-                igLink.style.background = 'rgba(128, 128, 128, 0.1)';
-                igLink.style.color = '#A0A0A0';
-                igLink.style.borderColor = 'transparent';
-                igLink.style.transform = 'translateX(-50%) scale(1)';
-            };
-
-            // 阻斷冒泡
-            igLink.onclick = (e) => e.stopPropagation();
-            igLink.onmousedown = (e) => e.stopPropagation();
-
-            container.appendChild(igLink);
-        }
+        container.setAttribute('data-cake-uid', data.userId);
+        container.setAttribute('data-cake-nts', nTs);
+        container.setAttribute('data-cake-d',data.joined);
+        VerifyIG(data.userId);
 
         if (!isStale) img.dataset.processed = "done";
     }
+
+    function VerifyIG(username) {
+        const event = new CustomEvent('REQUEST_IG_VERIFY', { detail: { username } });
+        window.dispatchEvent(event);
+    }
+
+    window.addEventListener('IG_VALID_RESULT', (e) => {
+        const { username, isValid, targetUrl } = e.detail;
+
+        const container = document.querySelector(`.cake-avatar-anchor[data-cake-uid="${username}"]`);
+        if (!container) return;
+        const currentNts = container.getAttribute('data-cake-nts');
+        if (isValid) {
+            if (!container.querySelector('.cake-ig-link')) {
+                const igLink = document.createElement('a');
+                igLink.className = 'cake-ig-link';
+                igLink.href = targetUrl;
+                igLink.target = '_blank';
+                igLink.innerText = '📸 IG';
+
+                igLink.style.cssText = `
+                    position: absolute;
+                    top: ${currentNts}; /* 使用專屬高度，不會被其他人蓋掉 */
+                    left: 50%;
+                    transform: translateX(-50%);
+                    font-size: 12px;
+                    z-index: 1000 !important;
+                    cursor: pointer !important;
+                    pointer-events: auto !important;
+                    text-decoration: none;
+                    padding: 2px 2px;
+                    border-radius: 5px;
+                    background: rgba(128, 128, 128, 0.1);
+                    color: #A0A0A0;
+                    white-space: nowrap;
+                    transition: all 0.2s ease;
+                    border: 1px solid transparent;
+                `;
+
+                // 懸停與阻斷冒泡效果保持不變...
+                igLink.onmouseenter = () => {
+                    igLink.style.background = 'rgba(214, 41, 118, 0.1)';
+                    igLink.style.color = '#E1306C';
+                    igLink.style.borderColor = 'rgba(214, 41, 118, 0.3)';
+                    igLink.style.transform = 'translateX(-50%) scale(1.1)';
+                };
+                igLink.onmouseleave = () => {
+                    igLink.style.background = 'rgba(128, 128, 128, 0.1)';
+                    igLink.style.color = '#A0A0A0';
+                    igLink.style.borderColor = 'transparent';
+                    igLink.style.transform = 'translateX(-50%) scale(1)';
+                };
+
+                igLink.onclick = (e) => e.stopPropagation();
+                igLink.onmousedown = (e) => e.stopPropagation();
+
+                container.appendChild(igLink);
+                container.removeAttribute('data-cake-uid');
+                container.removeAttribute('data-cake-nts');
+            }
+        }
+        else{
+            if (!container.querySelector('.cake-ig-link')) {
+                const igLink = document.createElement('div');
+                igLink.className = 'cake-ig-link';
+                const checkdate=container.getAttribute('data-cake-d');
+
+                if((getTimestampFromMonth("2026年06月")-getTimestampFromMonth(checkdate)) > 0){
+                    igLink.innerText = '解除綁定IG';
+                }
+                else{
+                    igLink.innerText = '未連結IG';
+                }
+
+                igLink.style.cssText = `
+                    position: absolute;
+                    top: ${currentNts};
+                    left: 50%;
+                    transform: translateX(-50%);
+                    font-size: 12px;
+                    z-index: 1000 !important;
+                    cursor: pointer !important;
+                    pointer-events: auto !important;
+                    text-decoration: none;
+                    padding: 2px 2px;
+                    border-radius: 5px;
+                    background: rgba(128, 128, 128, 0.1);
+                    color: #A0A0A0;
+                    white-space: nowrap;
+                    transition: all 0.2s ease;
+                    border: 1px solid transparent;
+                `;
+
+                container.appendChild(igLink);
+                container.removeAttribute('data-cake-uid');
+                container.removeAttribute('data-cake-nts');
+            }
+        }
+    });
 
     function hideBadge(scope) {
         const badge = scope.querySelector('[class*="threads-"][title]');
         if (badge) badge.style.setProperty('display', 'none', 'important');
     }
 
-    doSmartSync().then(() => {
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
-            //[class*="threads-"][title] { opacity: 0.01 !important; position: absolute !important; pointer-events: auto !important; }
-            .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
-            .cake-avatar-anchor::after {
-                content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-                margin-top: 6px; color: #A0A0A0; font-size: 10px; white-space: pre; line-height: 1.1;
-                text-align: center; z-index: 10; pointer-events: none; width: max-content; display: block !important;
+    try {
+        doSmartSync().catch(err => console.log("背景預載入提示:", err));
+    } catch(e) {}
+
+    setTimeout(() => {
+        setInterval(() => {
+            try {
+                doSmartSync();
+            } catch(e) {
+                console.error("定時器執行衝突:", e);
             }
-            .cake-avatar-anchor[data-cake-date="⏳"]::after { animation: hourglass-flip 1s linear infinite !important; }
-        `;
-        document.head.appendChild(style);
-        setTimeout(() => { setInterval(doSmartSync, 1500); doSmartSync(); }, 1500);
-    });
+        }, 1500);
+
+        try { doSmartSync(); } catch(e) {}
+    }, 1500);
 })();
