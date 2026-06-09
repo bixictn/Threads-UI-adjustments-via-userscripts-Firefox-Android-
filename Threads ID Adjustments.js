@@ -51,7 +51,7 @@
             const cached = await window.THREADS_DB_CENTER.getProfile(userId);
             const now = Date.now();
             const isFresh = cached && (now - cached.timestamp < days);
-            getProfile(userId);
+            
             if (isFresh) {
                 console.log("setProfile");
                 renderUI(scope, cached);
