@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.3.3
+// @version      0.3.4
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -86,6 +86,7 @@
         }
         if(!state.isBackAction)state.isBackAction=true;
         const currentPath = window.location.pathname;
+
         if(debug)console.log('======================================');
         if(debug)console.log(lastPath+"\n"+currentPath);
         if(debug)console.log('popstate:PageChange -> '+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+' : is Media -> '+state.isMediaAction);
@@ -97,10 +98,10 @@
         if(debug) console.log('modify popstate:PageChange -> '+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+' : is Media -> '+state.isMediaAction);
 
         if (state.userDMAction) {
+
             if(debug)console.log('user DM Action!!!');
             setScrollLocation(currentPath,e);
 
-            if (window.THREADS_UI) window.THREADS_UI.ActiveHideBlackout();
             return;
 
         }
@@ -136,6 +137,7 @@
                 }
             }
 
+            if (window.THREADS_UI && (!menu && !replay)) window.THREADS_UI.ActiveShowBlackout();
             if(checkPath(currentPath,e)){
                 pwaGuard(currentPath);
                 return;
@@ -221,15 +223,16 @@
             if(debug)console.log("check path:"+cPath+": BackAction:"+state.isBackAction+" DMAction:"+state.isDMAction+": MeidaAction:"+state.isMediaAction);
             if(window.scrollY>100){
                 if(debug)console.log("🔝 首頁再次返回：捲動回頂端");
+                window.scrollTo(10,0);
                 scrollHistory[cPath]=0;
                 return true;
             }
             else{
-                if(debug)console.log('to Logo');
+                if(debug)console.log('click Logo');
+                window.scrollTo(0,0);
                 clickLogo();
                 return true;
             }
-            if (window.THREADS_UI) window.THREADS_UI.ActiveHideBlackout();
         }
         return false;
     }
@@ -376,8 +379,9 @@
 
     const rawBack = history.back;
     history.back = function() {
-        state.userDMAction=true;
+        state.isDMAction=true;
         if(debug) console.log('check back action: Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
+
         return rawBack.apply(this, arguments);
     };
 
@@ -388,11 +392,11 @@
         const currentPath = window.location.pathname;
         if(debug) console.log('nowpage:'+currentPath+'\nlastpage:'+lastPath);
         if(lastPath !== currentPath){
-            if (window.THREADS_UI) window.THREADS_UI.ActiveShowBlackout();
+            if (window.THREADS_UI && !isPanelVisible) window.THREADS_UI.ActiveShowBlackout();
             if(currentPath.endsWith('/'))delete scrollHistory[currentPath];
             lastPath = currentPath;
             state.isPageChange=true;
-            state.userDMAction=true;
+            state.isDMAction=true;
         }
         else{
             state.isInterval = true;
@@ -400,10 +404,27 @@
         }
         if(debug) console.log('modify pushstate:PageChange:'+state.isPageChange+' Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction+':'+state.isStartTouch);
         isDeployed = false;
-        if(isPanelVisible)state.isStartTouch=true;       
+        if(isPanelVisible)state.isStartTouch=true;
     };
 
     const pwaObserver = new MutationObserver((mutations) => {
+        if(window.THREADS_UI){
+            const savedScroll = scrollHistory[window.location.pathname];
+            const isScrollMatch = savedScroll === 'undefined' || Math.abs(savedScroll - window.scrollY) < 5;
+
+            if (isScrollMatch && window.THREADS_UI.blackoutstatus) {
+                let loading=document.querySelector('[data-visualcompletion="loading-state"]');
+                const checks = document.querySelectorAll('[data-pagelet^="threads_feed"],[data-pagelet^="threads_post_page"]');
+                for (const check of checks) {
+                    if (check.textContent.trim().length > 50 && loading && window.THREADS_UI.blackoutstatus) {
+                        setTimeout(() => {
+                            window.THREADS_UI.ActiveHideBlackout();
+                        },1500);
+                        break;
+                    }
+                }
+            }
+        }
         const currentPath = window.location.pathname;
         const reply = document.querySelector('[aria-hidden="false"]');
         isPanelVisible=reply?true:false;
@@ -456,7 +477,7 @@
                 }
             }
         }
-        else{       
+        else{   
 
             const node = document.querySelectorAll('[class*="__fb"]');
             if(node.length<=1)return;
