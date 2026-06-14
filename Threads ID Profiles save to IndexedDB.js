@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID Profiles save to IndexedDB
-// @version      0.5.0
+// @version      0.5.1
 // @description  Threads ID Profiles save to IndexedDB
 // @author       Gemini Adaptive AI
 // @match        https://www.threads.net/*
@@ -10,7 +10,7 @@
 
 (function() {
     'use strict';
-    const version='v0.5.0';
+    const version='v0.5.1';
     const db_version=1;
     const ZIpanel=3,ZIbtn=4,ZIpgb=2;
     let caller=false;
@@ -157,8 +157,7 @@
 		}
 
         /* 搜尋框樣式微調 */
-        .idb-search-input {
-            width: 100%;
+        .idb-search-input {           
             padding: 8px 12px;
             margin-bottom: 10px;
             border-radius: 8px;
@@ -302,9 +301,60 @@
                     if (cursor) {
                         const item = cursor.value;
                         // 支援大小寫不敏感的包含比對
-                        if (item.userId && item.userId.toLowerCase().includes(lowerKeyword)) {
+
+                        if(lowerKeyword.length === 0){
+                         results.push(item);
+                        }
+                        else if (item.userId && item.userId.toLowerCase().includes(lowerKeyword)) {
                             results.push(item);
                         }
+
+                        // 限制搜尋結果最大數量（例如 50 筆），避免極端狀況效能卡頓
+                        if (results.length >= 50) {
+                            res(results);
+                            return;
+                        }
+                        cursor.continue();
+                    } else {
+                        // 搜尋完成，依照時間戳記降序排列 (新到舊)
+                        results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                        res(results);
+                    }
+                };
+                cursorReq.onerror = () => res([]);
+            });
+        } catch (err) {
+            console.error("🔴 搜尋發生錯誤:", err);
+            return [];
+        }
+    };
+
+    const searchLocation = async (keyword) => {
+        try {
+            const db = await getDB();
+            if (!db.objectStoreNames.contains(STORE_NAME)) return [];
+
+            return new Promise((res) => {
+                const tx = db.transaction([STORE_NAME], 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const results = [];
+                const lowerKeyword = keyword.toLowerCase();
+
+                // 使用 cursor 走訪資料進行部分比對
+                const cursorReq = store.openCursor();
+                cursorReq.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const item = cursor.value;
+                        // 支援大小寫不敏感的包含比對
+
+                        if(lowerKeyword.length === 0){
+                         results.push(item);
+                        }
+                        else if (item.location && item.location.toLowerCase().includes(lowerKeyword)) {
+                            results.push(item);
+                        }
+
                         // 限制搜尋結果最大數量（例如 50 筆），避免極端狀況效能卡頓
                         if (results.length >= 50) {
                             res(results);
@@ -472,7 +522,10 @@
                 <span style="font-size:11px;opacity:0.6;">目前總人數：<strong class="db-count" style="font-size:14px;color:#D4AF37;">${stats.count.toLocaleString()}</strong></span>
             </div>
 
-            <input type="text" id="idb-search-user" class="idb-search-input" placeholder="輸入帳號關鍵字搜尋...">
+            <div style="display: flex; gap: 8px;">
+                <input style="width: 70%;" type="text" id="idb-search-user" class="idb-search-input" placeholder="輸入帳號關鍵字搜尋...">
+                <input style="width: 30%;" type="text" id="idb-search-location" class="idb-search-input" placeholder="輸入位置搜尋...">
+            </div>
 
             <div id="idb-list-content" style="flex: 1; min-height:150px; overflow-y:auto; margin-bottom:15px;"></div>
 
@@ -499,6 +552,20 @@
             } else {
                 // 執行模糊搜尋
                 const filteredList = await searchProfiles(val);
+                updatePanelUI({ count: stats.count, latest: filteredList });
+            }
+        };
+
+        const searchLocationInput = document.getElementById('idb-search-location');
+        searchLocationInput.oninput = async (e) => {
+            const val = e.target.value.trim();
+            if (val === '') {
+                // 如果搜尋清空，還原回預設的最新 20 筆
+                const defaultStats = await getStats();
+                updatePanelUI(defaultStats);
+            } else {
+                // 執行模糊搜尋
+                const filteredList = await searchLocation(val);
                 updatePanelUI({ count: stats.count, latest: filteredList });
             }
         };
