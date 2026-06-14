@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID Adjustments
-// @version      0.5.0
+// @version      0.5.1
 // @description  Threads ID Adjustments
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
@@ -47,13 +47,11 @@
             const userId = href.replace(/^\/@?/, '').split('/')[0];
             if(!isInViewport(userLink))continue;
 
-            
             const cached = await window.THREADS_DB_CENTER.getProfile(userId);
             const now = Date.now();
             const isFresh = cached && (now - cached.timestamp < days);
-            
-            if (isFresh) {
-                console.log("setProfile");
+
+            if (isFresh) {                
                 renderUI(scope, cached);
                 continue;
             }
@@ -68,12 +66,11 @@
                     container.classList.add("cake-avatar-anchor");
                     container.setAttribute('data-cake-date', "⏳");
                 }
-                 getProfile(userId);
-                console.log("getProfile");
+                getProfile(userId);
             }
         }
     }
-   
+
     // --- UI 渲染與樣式 ---
     function getTimestampFromMonth(dateStr) {
         if (!dateStr || dateStr.includes("未知")) return 0;
