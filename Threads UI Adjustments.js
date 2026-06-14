@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads UI Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.9.8.8
+// @version      0.9.9
 // @description  Threads UI Adjustments
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -17,8 +17,9 @@
     // --- 1. 物理遮罩、毛玻璃與基礎 CSS ---
     const style = document.createElement('style');
     style.textContent = `
-
-        [data-pagelet="threads_post_page_0"] { opacity: 0 !important; }
+        html, body, #scrollview, [role="main"] {
+            overflow-anchor: none !important;
+        }
 
         /* 隱藏廣告與跳轉連結 */
         a[href^="intent://"], a[href*="itunes.apple.com"], a[href*="play.google.com"] { display: none !important; }
@@ -140,7 +141,8 @@
         },
         ActiveHideBlackout: () => {
             hideBlackout();
-        }
+        },
+        get blackoutstatus() {return blackouttime;}
     };
 
     const blackoutDiv = document.createElement('div');
@@ -156,7 +158,7 @@
         const currentPath = window.location.pathname;
         const currentPathnode = currentPath.split('/');
         let limittime=3000;
-        if(currentPath.endsWith("/") && currentPathnode.length===1) limittime=8000;
+        if(currentPath.endsWith("/") && currentPathnode[1]==="") limittime=30000;
 
 
         setTimeout(()=>{
@@ -167,12 +169,7 @@
         },limittime);
     }
 
-    function hideBlackout() {
-        const pageZero = document.querySelector('[data-pagelet="threads_post_page_0"]');
-        if (pageZero) {
-            void pageZero.offsetHeight;
-            pageZero.style.setProperty('opacity', '1', 'important');
-        }
+    function hideBlackout() {       
         blackoutDiv.style.display = 'none';
         blackouttime=false;
     }
@@ -488,15 +485,15 @@
     //navigation --- start
     function updateNavActiveState() {
 
-        if(window.THREADS_PWA){
-            if(!window.THREADS_PWA.checkIsMobile()){
-                const firsthtmldiv = document.querySelector('div[class*="html-div"');
-                if(firsthtmldiv){
-                    const headerbar=firsthtmldiv.parentElement?.parentElement;
-                    headerbar.style.setProperty("width","fit-content","important");
-                }
+        const bar = document.getElementById('barcelona-page-layout');
+        if(bar){
+            const firsthtmldiv = bar.querySelector('div[class*="html-div"');
+            if(firsthtmldiv){
+                const headerbar=firsthtmldiv.parentElement?.parentElement;
+                headerbar.style.setProperty("width","fit-content","important");
             }
         }
+
 
         const currentPath = window.location.pathname;
         const navLinks = document.querySelectorAll('a[role="link"], div[role="button"]');
@@ -615,7 +612,6 @@
     // --- 3. 監聽與 SPA 導航控制 ---
     function mainLoop() {
         const currentPath = window.location.pathname;
-        const check=document.querySelector('[data-pagelet="threads_feed_0"],[data-pagelet="threads_post_page_0"]');
 
         document.querySelectorAll('time').forEach(t => applyIdReformat(t));
         document.querySelectorAll('svg[aria-label="讚"], svg[aria-label="收回讚"]').forEach(i => applyButtonStyle(i));
@@ -631,19 +627,10 @@
         } else {
             handleMainPageindent();
         }
-
-        if (check !== null){
-            if(check.dataset.processed ==='true') {
-                hideBlackout();
-            }
-        }
-
-        if(currentPath.includes('/@') && !currentPath.includes('/post/'))hideBlackout();
-
     }
 
     const observer = new MutationObserver(()=>{mainLoop();});
-    observer.observe(document.documentElement, { childList: true, subtree: true });    
+    observer.observe(document.documentElement, { childList: true, subtree: true });
 
-    showBlackout();
+    if(window.THREADS_PWA)if(window.THREADS_PWA.isStartTouch)showBlackout();
 })();
