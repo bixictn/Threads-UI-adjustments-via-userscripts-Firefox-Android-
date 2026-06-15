@@ -2,7 +2,7 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.3.4
+// @version      0.3.4.1
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
@@ -410,7 +410,7 @@
     const pwaObserver = new MutationObserver((mutations) => {
         if(window.THREADS_UI){
             const savedScroll = scrollHistory[window.location.pathname];
-            const isScrollMatch = savedScroll === 'undefined' || Math.abs(savedScroll - window.scrollY) < 5;
+            const isScrollMatch = savedScroll === undefined || Math.abs(savedScroll - window.scrollY) < 5;
 
             if (isScrollMatch && window.THREADS_UI.blackoutstatus) {
                 let loading=document.querySelector('[data-visualcompletion="loading-state"]');
