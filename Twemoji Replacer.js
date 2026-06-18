@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Twemoji Replacer
-// @version       0.9.3.5
+// @version       0.9.3.6
 // @description   Twemoji Replacer
 // @author        Gemini
 // @match         *://*/*
@@ -175,8 +175,10 @@
                 img.className = "twemojified";
                 img.alt = emoji;
                 Object.assign(img.style, {
-                    height: "1.1em", width: "1.1em", verticalAlign: "middle",
-                    margin: "0 0.05em 0.1em 0.05em"
+                    height: "1.1em", width: "1.1em", 
+                    margin: "0 0 0 0",
+                    display: "flex",
+                    alignItems: "center"
                 });
                 lockSpan.appendChild(img);
                 fetchEmoji(emoji, img);
