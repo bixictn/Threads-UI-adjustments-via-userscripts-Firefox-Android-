@@ -2,11 +2,14 @@
 // @name         Threads PWA Gesture Adjustments
 // @match        https://www.threads.com/*
 // @match        https://www.threads.net/*
-// @version      0.3.4.1
+// @version      0.3.4.2
 // @description  Threads PWA Gesture Adjustments
 // @author       Gemini
 // @grant        none
 // @run-at       document-start
+// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments
+// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments
+
 // ==/UserScript==
 
 (function() {
@@ -16,7 +19,7 @@
     let scrollHistory = {}, replylist= new Set(),replylength=0;
     const TAG = "#pwa_guard";
     const SESSION_KEY = "pwa_guard_session_console.loged";
-    let isDeployed = false,debug=false;
+    let isDeployed = false,debug=true;
     let isPanelVisible = false, dialogthenpopmenu=false;
     const state = {
         isPageChange: false,
@@ -164,50 +167,23 @@
 
         if(debug)console.log(`[Start] 準備捲動至: ${targetY} (Path: ${currentPath})`);
 
-        executeAfterScroll(targetY, () => {
-
-            targetScrollY = window.scrollY;
-            let attempts = 0;
-            const recoverScroll = setInterval(() => {
-                window.scrollTo(0, targetY);
-                attempts++;
-                if(debug)console.log("setLocation:"+currentPath+":"+targetY+'Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
-
-                if (attempts > 30 || Math.abs(window.scrollY - savedPos) < 2) {
-                    clearInterval(recoverScroll);
-                    setTimeout(() => {
-                        state.isBackAction = false;
-                    }, 200);
-                }
-            }, 30);
-
-            pwaGuard(currentPath);
-        });
-
-    }
-
-    function executeAfterScroll(targetY, callback) {
+        targetScrollY = window.scrollY;
         let attempts = 0;
-        const maxAttempts = 60;
-
-        const check = () => {
-            const currentY = window.scrollY;
+        const recoverScroll = setInterval(() => {
+            window.scrollTo(0, targetY);
             attempts++;
+            if(debug)console.log("setLocation:"+currentPath+":"+targetY+'Back Active ->'+state.isBackAction+' DM Active ->'+state.isDMAction+' : Interval Active -> '+state.isInterval+': User DMActive -> '+state.userDMAction);
 
-            if (Math.abs(currentY - targetY) <= 2 || attempts >= maxAttempts) {
-                requestAnimationFrame(() => {
-                    if(debug)console.log(`[ScrollFix] 已到位: ${window.scrollY}, 耗時: ${attempts} 畫格`);
-                    callback();
-                });
-            } else {
-                requestAnimationFrame(check);
+            if (attempts > 30 || Math.abs(window.scrollY - savedPos) < 2) {
+                clearInterval(recoverScroll);
+                setTimeout(() => {
+                    state.isBackAction = false;
+                }, 200);
             }
-        };
+        }, 30);
 
-        window.scrollTo(0, targetY);
-        requestAnimationFrame(check);
+        pwaGuard(currentPath);
     }
-
 
     function checkPath(cPath,e){
 
