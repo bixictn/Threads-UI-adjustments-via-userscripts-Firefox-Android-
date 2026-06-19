@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name          Twemoji Replacer
-// @version       0.9.3.6
+// @version       0.9.3.7
 // @description   Twemoji Replacer
 // @author        Gemini
 // @match         *://*/*
 // @grant         GM_xmlhttpRequest
 // @connect       cdn.jsdelivr.net
 // @run-at        document-start
+// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Twemoji%20Replacer.js
+// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Twemoji%20Replacer.js
 // ==/UserScript==
 
 (function() {
@@ -169,16 +171,20 @@
 
                 const lockSpan = document.createElement('span');
                 lockSpan.className = "tw-p-lock";
-                Object.assign(lockSpan.style, { display: "inline"});
+                Object.assign(lockSpan.style, {
+                    display: "inline-block",
+                    whiteSpace: "nowrap",
+                });
 
                 const img = document.createElement('img');
                 img.className = "twemojified";
                 img.alt = emoji;
+                img.style.fontSize = "1.1em";
                 Object.assign(img.style, {
-                    height: "1.1em", width: "1.1em", 
-                    margin: "0 0 0 0",
                     display: "flex",
-                    alignItems: "center"
+                    alignItems: "center",
+                    whiteSpace: "nowrap",
+                    width: "1.1em"
                 });
                 lockSpan.appendChild(img);
                 fetchEmoji(emoji, img);
