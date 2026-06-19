@@ -7,8 +7,8 @@
 // @author       Gemini
 // @grant        none
 // @run-at       document-start
-// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments
-// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments
+// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments.js
+// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20PWA%20Gesture%20Adjustments.js
 
 // ==/UserScript==
 
