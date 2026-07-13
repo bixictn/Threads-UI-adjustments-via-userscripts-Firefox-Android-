@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Image Gesture & Media Icons Adjustments
 // @namespace    http://tampermonkey.net/
-// @version      0.2.1
+// @version      0.3.0
 // @description  Threads Image Gesture & Media Icons Adjustments
 // @author       Gemini
 // @match        https://www.threads.net/*
@@ -11,7 +11,8 @@
 
 (function() {
     'use strict';
-
+    //2026/07/XX 手機網頁版 影音 Threads有改, 拿掉修正
+    //                     圖片 Threads有加手勢, 拿掉修正
     // --- 1. 樣式注入 ---
     const style = document.createElement('style');
     style.textContent = `
@@ -28,7 +29,8 @@
 
     // --- 2. 介面調整邏輯 (固定位置) ---
     const repositionElements = () => {
-        if (!window.location.pathname.endsWith('/media')) return;
+        if (!window.location.pathname.endsWith('/media')){unlockScroll(); return;};
+        lockScroll();
         const allTitles = document.querySelectorAll('svg title');
 
         allTitles.forEach(title => {
@@ -48,24 +50,28 @@
                 btn.classList.remove('ts-half');
             }
 
-            // B. 處理「音量/靜音」：固定右下角 + 動態透明度
-            if (text.includes("靜音") || text.includes("播放")){
-
-                // 判斷透明度：只有「已靜音」才不透明
-                if (text === "已靜音") {
-
-                    btn.classList.add('ts-opaque');
-                    btn.classList.remove('ts-half');
-                } else {
-                    btn.classList.add('ts-half');
-                    btn.classList.remove('ts-opaque');
-
-                }
-            }
         });
     };
 
-    // --- 3. 圖片縮放功能 (維持嚴格邊界限制) ---
+    function lockScroll() {
+        document.body.style.overflow = "hidden";
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.touchAction = "none";
+        document.documentElement.style.touchAction = "none";
+        document.body.style.overscrollBehavior = "none";
+        document.documentElement.style.overscrollBehavior = "none";
+    }
+
+    function unlockScroll() {
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        document.body.style.touchAction = "";
+        document.documentElement.style.touchAction = "";
+        document.body.style.overscrollBehavior = "";
+        document.documentElement.style.overscrollBehavior = "";
+    }
+
+    // --- 3. 圖片縮放功能 ---
     function setupImageZoom( img,closeViewer) {
 
         let scale = 1;
@@ -84,24 +90,6 @@
         let lastTap = 0, touches=1;
         img.style.transformOrigin = "center center";
 
-        function lockScroll() {
-            document.body.style.overflow = "hidden";
-            document.documentElement.style.overflow = "hidden";
-            document.body.style.touchAction = "none";
-            document.documentElement.style.touchAction = "none";
-            document.body.style.overscrollBehavior = "none";
-            document.documentElement.style.overscrollBehavior = "none";
-        }
-
-        function unlockScroll() {
-            document.body.style.overflow = "";
-            document.documentElement.style.overflow = "";
-            document.body.style.touchAction = "";
-            document.documentElement.style.touchAction = "";
-            document.body.style.overscrollBehavior = "";
-            document.documentElement.style.overscrollBehavior = "";
-        }
-
         function clampPosition() {
             const scaledWidth = img.offsetWidth * scale;
             const scaledHeight = img.offsetHeight * scale;
@@ -116,72 +104,7 @@
         function updateTransform() {
             clampPosition();
             img.style.transform = `translate3d(${pointX}px,${pointY}px,0) scale(${scale})`;
-            if (scale > 1) {
-                lockScroll();
-            }
-            else {
-                unlockScroll();
-            }
         }
-
-        img.addEventListener("touchstart", e => {
-            touchMode = true;
-            img.style.transition = "none";
-            if ( e.touches.length === 1 ) {
-                touches=1;
-                startX = e.touches[0].pageX - pointX;
-                startY = e.touches[0].pageY - pointY;
-            }
-            else if ( e.touches.length === 2 ) {
-                touches=2;
-                initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY );
-            }
-        }, { passive:true });
-
-        img.addEventListener( "touchmove", e => {
-            if ( e.touches.length === 1 && scale > 1 ) {
-                touches=1;
-                e.preventDefault();
-                pointX = e.touches[0].pageX - startX;
-                pointY = e.touches[0].pageY - startY;
-                updateTransform();
-            }
-            else if ( e.touches.length === 2) {
-                touches=2;
-                e.preventDefault();
-                const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX,
-                                        e.touches[0].pageY - e.touches[1].pageY);
-                scale *= dist / initialDist;
-                scale = Math.max( 1, Math.min( 5, scale ) );
-                initialDist = dist;
-                updateTransform();
-            }
-
-        },{ passive:false });
-
-        img.addEventListener("touchend",() => {
-            const now = Date.now();
-            if ( (now - lastTap < 300) && touches === 1) {
-                if ( scale === 1 ) {
-                    scale = 2;
-                } else {
-                    scale = 1;
-                    pointX = 0;
-                    pointY = 0;
-                }
-                updateTransform();
-            }
-            lastTap = now;
-
-            if ( scale <= 1.05) {
-                scale = 1;
-                pointX = 0; pointY = 0;
-                img.style.transition = "transform .25s ease";
-                img.style.transform = "translate3d(0,0,0) scale(1)";
-                unlockScroll();
-            }
-
-            setTimeout( () => { touchMode = false; }, 50);	});
 
         img.addEventListener("wheel", e => {
             e.preventDefault();
