@@ -1,25 +1,27 @@
 // ==UserScript==
 // @name         Threads ID Adjustments
-// @version      0.5.1
+// @version      0.5.2
 // @description  Threads ID Adjustments
 // @match         https://www.threads.net/*
 // @match         https://www.threads.com/*
 // @grant         none
 // @run-at        document-start
+// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20ID%20Adjustments.js
+// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20ID%20Adjustments.js
 // ==/UserScript==
 
 (function() {
     'use strict';
     const style = document.createElement('style');
     style.textContent = `
-        @keyframes hourglass-flip { 0%, 85% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(180deg); } }
+        @keyframes hourglass-flip { 0% { transform: translateX(-50%) rotate(0deg); }  50% { transform: translateX(-50%) rotate(180deg); } 100% { transform: translateX(-50%) rotate(350deg); } }
         .cake-avatar-anchor { position: relative !important; display: flex !important; justify-content: center !important; }
         .cake-avatar-anchor::after {
             content: attr(data-cake-date); position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
             margin-top: 6px; color: #A0A0A0; font-size: 10px; white-space: pre; line-height: 1.1;
             text-align: center; z-index: 10; pointer-events: none; width: max-content; display: block !important;
         }
-        .cake-avatar-anchor[data-cake-date="⏳"]::after { animation: hourglass-flip 1s linear infinite !important; }
+        .cake-avatar-anchor[data-cake-date="💿"]::after { animation: hourglass-flip 1s linear infinite !important; }
     `;
     (document.head || document.documentElement).appendChild(style);
 
@@ -51,23 +53,36 @@
             const now = Date.now();
             const isFresh = cached && (now - cached.timestamp < days);
 
-            if (isFresh) {                
-                renderUI(scope, cached);
-                continue;
-            }
 
             const container = img.parentElement?.parentElement;
             if (!container) continue;
 
-            const isWaiting = container.getAttribute('data-cake-date') === "⏳";
-
-            if (!isWaiting) {
-                if (container) {
-                    container.classList.add("cake-avatar-anchor");
-                    container.setAttribute('data-cake-date', "⏳");
-                }
-                getProfile(userId);
+            if (isFresh) {
+                container.classList.add("cake-avatar-anchor");
+                if(cached)renderUI(scope, cached);
+                continue;
             }
+            else{
+
+                container.classList.add("cake-avatar-anchor");
+                container.setAttribute('data-cake-username',userId);
+                if(container.getAttribute('data-cake-date') === "🚫"){
+                    if(cached)renderUI(scope, cached);
+                    continue;
+                }
+                const isWaiting = container.getAttribute('data-cake-date') === "💿";
+                if (!isWaiting) {
+                    container.setAttribute('data-cake-date', "💿");
+                    console.log("getProfile:"+userId);
+                    setTimeout(getProfile(userId),2000);
+                }
+
+            }
+
+
+
+
+
         }
     }
 
@@ -102,7 +117,7 @@
         container.setAttribute('data-cake-uid', data.userId);
         container.setAttribute('data-cake-nts', nTs);
         container.setAttribute('data-cake-d',data.joined);
-        VerifyIG(data.userId);
+        //VerifyIG(data.userId);
 
 
         if (!isStale) img.dataset.processed = "done";
@@ -118,6 +133,17 @@
         window.dispatchEvent(event);
     }
 
+    window.addEventListener('REQUEST_PROFILE_TIMEOUT', (e) => {
+        const { username } = e.detail;
+        const container = document.querySelector(`.cake-avatar-anchor[data-cake-username="${username}"]`);
+        if (!container) return;
+
+        let display = "🚫";
+
+        container.classList.add("cake-avatar-anchor");
+        container.setAttribute('data-cake-date', display);
+
+    });
 
     window.addEventListener('IG_VALID_RESULT', (e) => {
         const { username, isValid, targetUrl } = e.detail;
