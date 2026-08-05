@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID Profiles Fetch Data
-// @version      0.2.0
+// @version      0.3.0
 // @description  Threads ID Profiles Fetch Data
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -8,9 +8,158 @@
 // @grant        unsafeWindow
 // @connect      instagram.com
 // @run-at       document-start
+// @updateURL    https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20ID%20Profiles%20Fetch%20Data.js
+// @downloadURL  https://raw.githubusercontent.com/bixictn/Threads-UI-adjustments-via-userscripts-Firefox-Android-/main/Threads%20ID%20Profiles%20Fetch%20Data.js
 // ==/UserScript==
 
 (function() {
+
+    function getPageTokens() {
+        let lsd = null;
+        let fb_dtsg = null;
+        let jazoest = null;
+        let bkv = null;
+
+        const html = document.documentElement.outerHTML;
+
+        // 1. 抓取 __bkv (WebBloksVersioningID)
+        const bkvMatch = html.match(/"WebBloksVersioningID",\[\],\{"versioningID":"([^"]+)"\}/) ||
+              html.match(/"versioningID":"([a-f0-9]{64})"/);
+        if (bkvMatch) bkv = bkvMatch[1];
+
+        // 2. 抓取 __eqmc (包含 fb_dtsg, lsd, jazoest)
+        const eqmcScript = document.getElementById('__eqmc');
+        if (eqmcScript) {
+            try {
+                const eqmcData = JSON.parse(eqmcScript.textContent);
+                if (eqmcData.f) fb_dtsg = eqmcData.f;
+                if (eqmcData.l) lsd = eqmcData.l;
+                if (eqmcData.u) {
+                    const jMatch = eqmcData.u.match(/jazoest=(\d+)/);
+                    if (jMatch) jazoest = jMatch[1];
+                }
+            } catch (e) {
+                console.error("解析 __eqmc 失敗:", e);
+            }
+        }
+
+        // 3. 備用方案抓取 LSD & DTSG
+        if (!lsd) {
+            const cookieMatch = document.cookie.match(/csrftoken=([^;]+)/);
+            if (cookieMatch) lsd = cookieMatch[1];
+        }
+        if (!fb_dtsg) {
+            const dtsgMatch = html.match(/"DTSGInitialData",\[\],\{"token":"([^"]+)"\}/);
+            if (dtsgMatch) fb_dtsg = dtsgMatch[1];
+        }
+
+        // 防呆處理 (若沒撈到 bkv，帶入備用常見 Hash)
+        const DEFAULT_BKV = "50c7a21dc7af8ce8a286d273ef189504f602cdb60446291108114644948a7720";
+
+        return {
+            lsd: lsd || "",
+            fb_dtsg: fb_dtsg || "",
+            jazoest: jazoest || "",
+            bkv: bkv || DEFAULT_BKV
+        };
+    }
+
+    // 測試執行
+    const tokens = getPageTokens();
+    console.log("當前頁面全域 Token:", tokens);
+
+    if (window.__blockedCounterInjected) {
+        console.log("⚠️ 攔截腳本已在執行中！");
+        return;
+    }
+    window.__blockedCounterInjected = true;
+
+    let totalBlockedCount = 0, restrictedCount=0;
+    const countedPks = new Set(); // 避免重複計算相同的 user ID
+
+    function countBlock() {
+        // 尋找頁面上的 role="heading" 元素（如「已封鎖的帳號」標題）
+        const headingEl = document.querySelector('[role="heading"]');
+        if (!headingEl) return;
+
+        const hes = headingEl.querySelector('span');
+
+        let badge = document.getElementById('custom-blocked-count-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.id = 'custom-blocked-count-badge';
+            badge.style.cssText = `
+                margin-left: 10px;
+                padding: 2px 8px;
+                background-color: rgba(255, 140, 0, 0.15);
+                color: #ff8c00;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 12px;
+                display: inline-block;
+                vertical-align: middle;
+            `;
+            hes.appendChild(badge);
+        }
+
+        const parts = [];
+        if (totalBlockedCount > 0 && hes.innerText.includes('封鎖')) parts.push(`封鎖：${totalBlockedCount} 人`);
+        if (restrictedCount > 0 && hes.innerText.includes('限制')) parts.push(`限制：${restrictedCount} 人`);
+
+        badge.textContent = parts.length > 0 ? parts.join(' | ') : '載入中...';
+    }
+
+    function parseResponse(jsonText) {
+        try {
+
+            const data = JSON.parse(jsonText);
+            if (data.data?.data?.users && Array.isArray(data.data.data.users)) {
+                restrictedCount = data.data.data.users.length;
+                setTimeout(countBlock,2000);
+                console.log(`[受限名單] 目前受限制人數：${restrictedCount} 人`);
+            }
+
+
+            const results = data?.data?.results;
+            if(results){
+                if (results && Array.isArray(results.edges)) {
+                    let newCount = 0;
+                    results.edges.forEach(edge => {
+                        const pk = edge?.node?.pk;
+                        if (pk && !countedPks.has(pk)) {
+                            countedPks.add(pk);
+                            newCount++;
+                        }
+                    });
+
+                    if (newCount > 0) {
+                        totalBlockedCount += newCount;
+                        countBlock(); // 更新 UI 畫面
+                        console.log(`[封鎖累計] 目前總計：${totalBlockedCount} 人`);
+                    }
+                }
+            }
+        } catch (e) {
+            // 非目標 JSON 忽略
+        }
+    }
+
+    // 2. 攔截 XHR (傳統 Ajax 備援)
+    const originalXHR = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        if (url && (url.includes('/graphql/query') || url.includes('/api/graphql'))) {
+            this.addEventListener('load', function() {
+                parseResponse(this.responseText);
+            });
+        }
+        return originalXHR.apply(this, arguments);
+    };
+
+    console.log("%c✅ XHR/Fetch 封鎖名單自動計數器已啟動！請在 Threads 頁面向下拉動或載入名單...", "color: #0095f6; font-size: 13px; font-weight: bold;");
+
+
+
+
     'use strict';
 
     const debug = false;
@@ -70,7 +219,7 @@
 
     unsafeWindow.THREADS_LST_FD = {
         getFlagEmoji: (country)=>{return getFlagEmoji(country);}
-    }    
+    }
 
     function getFlagEmoji(country) {
         const code = countryFlagsMap[country];
@@ -83,67 +232,132 @@
 
     const decode = (s) => s ? s.replace(/\\u([0-9a-fA-F]{4})/g, (m, g) => String.fromCharCode(parseInt(g, 16))) : null;
 
-    window.addEventListener('REQUEST_PROFILE',(e) =>{
+    const processedUsernames = new Set();
+
+    // 2. 請求佇列陣列
+    const requestQueue = [];
+
+    // 3. 標記目前是否正在處理 Queue 中
+    let isProcessingQueue = false;
+
+    // 4. 設定請求間隔時間（毫秒），建議 1000~2000ms 避免觸發 Meta 13秒懲罰
+    const REQUEST_DELAY = 1500;
+
+    // 監聽事件：只負責把任務推入 Queue
+    window.addEventListener('REQUEST_PROFILE', (e) => {
         const { username } = e.detail;
-        const targetIgUrl = `https://www.instagram.com/${username}/`;
 
-        GM_xmlhttpRequest({
-            method: "GET",
-            url: `https://www.threads.com/@${username}`,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8"
-            },
-            timeout: 4000,
-            onload: function(response) {
-                const html = response.responseText || "";
-                const htmlString = response.responseText;
-                let targetId;
+        if (!username || processedUsernames.has(username)) {
+            console.log(`[Skip] ${username} 已經處理過或在佇列中`);
+            return;
+        }
 
-                const userIdMatch = response.responseText.match(/"user_id":"(\d+)"/);
-                if (userIdMatch) {
-                    targetId = userIdMatch[1];
-                }
+        // 標記為已處理（防止重複推入 Queue）
+        processedUsernames.add(username);
+        // 推入佇列
+        requestQueue.push(username);
 
-                const dtsgRegex = /"DTSGInitialData",\[\],\{"token":"([^"]+)"\}/;
-                const dtsgMatch = htmlString.match(dtsgRegex);
-                const fb_dtsg = dtsgMatch ? dtsgMatch[1] : null;
+        // 嘗試觸發 Queue 執行器
+        processNextQueueItem();
+    });
 
-                const lsdRegex = /"LSD",\[\],\{"token":"([^"]+)"\}/;
-                const lsdMatch = htmlString.match(lsdRegex);
-                const lsd = lsdMatch ? lsdMatch[1] : null;
 
-                const bkvMatch = htmlString.match(/"WebBloksVersioningID",\[\],\{"versioningID":"([^"]+)"\}/);
-                const __bkv = bkvMatch ? bkvMatch[1] : null;
+    function getUserIdViaGraphQL(username, tokens) {
+        return new Promise((resolve) => {
+            const { lsd, fb_dtsg } = tokens;
+            console.log(`[GraphQL Debug] 準備查詢 @${username} | Token 狀態: LSD=${!!tokens.lsd}, DTSG=${!!tokens.fb_dtsg}`);
+            // profiles doc_id
+            const DOC_ID = "28194833553463057";
 
-                const eqmcRegex = /<script id="__eqmc" type="application\/json"[^>]*>(.*?)<\/script>/;
-                const eqmcMatch = htmlString.match(eqmcRegex);
-                let jazoest;
-
-                if (eqmcMatch) {
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: `${window.location.origin}/graphql/query`,
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-FB-Friendly-Name": "BarcelonaUsernameHovercardImplDirectQuery",
+                    "X-IG-App-ID": "238260118697367",
+                    "X-FB-LSD": tokens.lsd, // 代入 csrftoken
+                    "X-CSRFToken": tokens.lsd, // 同時帶上 X-CSRFToken
+                    "Sec-Fetch-Mode": "cors"
+                },
+                data: new URLSearchParams({
+                    'lsd': tokens.lsd,
+                    'fb_dtsg': tokens.fb_dtsg,
+                    'doc_id': DOC_ID,
+                    'variables': JSON.stringify({
+                        "username": username,
+                        "__relay_internal__pv__BarcelonaIsInternalUserrelayprovider": false,
+                        "__relay_internal__pv__BarcelonaIsLoggedInrelayprovider": true,
+                        "__relay_internal__pv__BarcelonaHasMessagingrelayprovider": true,
+                        "__relay_internal__pv__BarcelonaShouldShowFediverseM1Featuresrelayprovider": true,
+                        "__relay_internal__pv__BarcelonaHasEventBadgerelayprovider": false
+                    })
+                }).toString(),
+                anonymous: false,
+                withCredentials: true,
+                onload: function(res) {
                     try {
-                        const eqmcData = JSON.parse(eqmcMatch[1]);
-
-                        const fb_dtsg = eqmcData.f;
-
-                        const uString = eqmcData.u;
-                        const jazoestMatch = uString.match(/jazoest=(\d+)/);
-                        jazoest = jazoestMatch ? jazoestMatch[1] : null;
-
+                        const json = JSON.parse(res.responseText);
+                        const userId = json?.data?.user?.pk || json?.data?.user?.id;
+                        resolve(userId);
+                        console.log("[GraphQL 成功] Target User ID:", userId);
                     } catch (e) {
-                        console.error("解析 __eqmc JSON 失敗:", e);
+                        console.error("[GraphQL 錯誤]", res.responseText);
                     }
                 }
-
-                if (targetId && fb_dtsg && lsd && __bkv && jazoest) {
-                    getProfile(username,targetId,fb_dtsg,lsd,jazoest,__bkv);
-                }
-
-            },
-            onerror: function() {
-            }
+            });
         });
-    });
+    }
+
+    // Queue 處理核心 logic
+    async function processNextQueueItem() {
+        // 如果目前正在處理中，或是佇列是空的，就直接返回
+        if (isProcessingQueue || requestQueue.length === 0) {
+            return;
+        }
+
+        // 鎖定狀態
+        isProcessingQueue = true;
+
+        // 取出佇列最前面的 username
+        const username = requestQueue.shift();
+
+        try {
+            console.log(`[Queue 執行中] 剩餘佇列: ${requestQueue.length} | 目前處理: ${username}`);
+            await fetchProfileTask(username);
+        } catch (err) {
+            console.error(`[Queue 錯誤] ${username}:`, err);
+        } finally {
+            // 請求完成後，強制等待一小段時間（Cooldown）再放行下一個
+            await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY));
+            // 解鎖並遞迴觸發下一個
+            isProcessingQueue = false;
+            processNextQueueItem();
+        }
+    }
+
+    async function fetchProfileTask(username) {
+        try {
+            // 確保取得當前全域 Token (防呆)
+            const currentTokens = typeof tokens !== 'undefined' ? tokens : getPageTokens();
+
+            // 使用 await 接收 Promise resolve 出來的 targetId
+            const targetId = await getUserIdViaGraphQL(username, currentTokens);
+
+            if (!targetId) {
+                console.error(`[Task 失敗] 無法取得 ${username} 的 targetId`);
+                return;
+            }
+
+            const { lsd, fb_dtsg, jazoest, bkv } = currentTokens;
+
+            console.log(`[Task 成功] 取得 ID: ${targetId}, 執行 getProfile`);
+            getProfile(username, targetId, fb_dtsg, lsd, jazoest, bkv);
+
+        } catch (err) {
+            console.error(`[fetchProfileTask 發生錯誤]:`, err);
+        }
+    }
 
     function getProfile(username,targetUserId, fb_dtsg, lsd, jazoest, __bkv) {
         const paramsObj = {
@@ -216,6 +430,7 @@
                             location: locationInfo,
                             timestamp: Date.now()
                         };
+                        console.log(finalData);
                         await unsafeWindow.THREADS_DB_CENTER.saveProfile(finalData);
 
                     } catch (e) {
