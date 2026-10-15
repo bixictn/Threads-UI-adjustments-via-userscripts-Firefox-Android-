@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Threads ID Profiles Fetch Data
-// @version      0.3.0
+// @version      0.3.0.1
 // @description  Threads ID Profiles Fetch Data
 // @match        https://www.threads.net/*
 // @match        https://www.threads.com/*
@@ -14,20 +14,58 @@
 
 (function() {
 
-    function getPageTokens() {
+    function getSessionBkv() {
+        return new Promise((resolve) => {
+            const STORAGE_KEY = "threads_bkv";
+            const DEFAULT_BKV = "50c7a21dc7af8ce8a286d273ef189504f602cdb60446291108114644948a7720";
+
+            // 1. 優先從 sessionStorage 讀取快取值 (排除 "null" 字串)
+            let cachedBkv = sessionStorage.getItem(STORAGE_KEY);
+            if (cachedBkv && cachedBkv !== "null") {
+                resolve(cachedBkv);
+                return; // 關鍵修正：必須 return 阻止後續發送 HTTP 請求
+            }
+
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://www.threads.com/`,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8"
+                },
+                timeout: 4000,
+                onload: function(response) {
+                    const htmlString = response.responseText || "";
+
+                    const bkvMatch = htmlString.match(/"WebBloksVersioningID",\[\],\{"versioningID":"([^"]+)"\}/) ||
+                          htmlString.match(/"versioningID"\s*:\s*"([a-f0-9]{64})"/i);
+
+                    // 關鍵修正：若抓不到則帶入預設 Hash，避免寫入 null
+                    const finalBkv = (bkvMatch && bkvMatch[1]) ? bkvMatch[1] : DEFAULT_BKV;
+
+                    sessionStorage.setItem(STORAGE_KEY, finalBkv);
+                    resolve(finalBkv);
+                },
+                onerror: function() {
+                    sessionStorage.setItem(STORAGE_KEY, DEFAULT_BKV);
+                    resolve(DEFAULT_BKV);
+                },
+                ontimeout: function() {
+                    sessionStorage.setItem(STORAGE_KEY, DEFAULT_BKV);
+                    resolve(DEFAULT_BKV);
+                }
+            });
+        });
+    }
+
+    async function getPageTokens() {
         let lsd = null;
         let fb_dtsg = null;
         let jazoest = null;
-        let bkv = null;
 
         const html = document.documentElement.outerHTML;
 
-        // 1. 抓取 __bkv (WebBloksVersioningID)
-        const bkvMatch = html.match(/"WebBloksVersioningID",\[\],\{"versioningID":"([^"]+)"\}/) ||
-              html.match(/"versioningID":"([a-f0-9]{64})"/);
-        if (bkvMatch) bkv = bkvMatch[1];
-
-        // 2. 抓取 __eqmc (包含 fb_dtsg, lsd, jazoest)
+        // 1. 從 __eqmc 標籤抓取
         const eqmcScript = document.getElementById('__eqmc');
         if (eqmcScript) {
             try {
@@ -43,9 +81,9 @@
             }
         }
 
-        // 3. 備用方案抓取 LSD & DTSG
+        // 2. 備用方案抓取 LSD (從 Cookie) & DTSG
         if (!lsd) {
-            const cookieMatch = document.cookie.match(/csrftoken=([^;]+)/);
+            const cookieMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
             if (cookieMatch) lsd = cookieMatch[1];
         }
         if (!fb_dtsg) {
@@ -53,20 +91,23 @@
             if (dtsgMatch) fb_dtsg = dtsgMatch[1];
         }
 
-        // 防呆處理 (若沒撈到 bkv，帶入備用常見 Hash)
-        const DEFAULT_BKV = "50c7a21dc7af8ce8a286d273ef189504f602cdb60446291108114644948a7720";
+        // 3. 取得 bkv (透過非同步 Promise)
+        const bkv = await getSessionBkv();
 
         return {
             lsd: lsd || "",
             fb_dtsg: fb_dtsg || "",
             jazoest: jazoest || "",
-            bkv: bkv || DEFAULT_BKV
+            bkv: bkv
         };
     }
 
-    // 測試執行
-    const tokens = getPageTokens();
-    console.log("當前頁面全域 Token:", tokens);
+    let tokens;
+    // 測試執行 (必須使用 async/await 或 .then 解開 Promise)
+    (async () => {
+        tokens = await getPageTokens();
+        console.log("當前頁面全域 Token:", tokens);
+    })();
 
     if (window.__blockedCounterInjected) {
         console.log("⚠️ 攔截腳本已在執行中！");
@@ -241,7 +282,7 @@
     let isProcessingQueue = false;
 
     // 4. 設定請求間隔時間（毫秒），建議 1000~2000ms 避免觸發 Meta 13秒懲罰
-    const REQUEST_DELAY = 1500;
+    const REQUEST_DELAY = 500;
 
     // 監聽事件：只負責把任務推入 Queue
     window.addEventListener('REQUEST_PROFILE', (e) => {
@@ -350,8 +391,6 @@
             }
 
             const { lsd, fb_dtsg, jazoest, bkv } = currentTokens;
-
-            console.log(`[Task 成功] 取得 ID: ${targetId}, 執行 getProfile`);
             getProfile(username, targetId, fb_dtsg, lsd, jazoest, bkv);
 
         } catch (err) {
@@ -402,27 +441,40 @@
                     try {
                         const jsonData = JSON.parse(cleanResponse);
 
-                        function extractTextNodes(obj, textArray = []) {
-                            if (Array.isArray(obj)) {
-                                obj.forEach(item => extractTextNodes(item, textArray));
+                        // 1. 抓地點 (直接拿，不受 UI 樣式干擾)
+                        const bloksData = jsonData?.payload?.layout?.bloks_payload?.data || [];
+                        const countryItem = bloksData.find(i => i?.data?.key === "THREADS_ABOUT_THIS_PROFILE:about_this_profile_country");
+                        const locationInfo = countryItem?.data?.initial || "無地點資料";
+
+                        // 2. 攤平所有字串
+                        function extractAllStrings(obj, results = []) {
+                            if (typeof obj === 'string') {
+                                results.push(obj);
+                            } else if (Array.isArray(obj)) {
+                                obj.forEach(item => extractAllStrings(item, results));
                             } else if (obj !== null && typeof obj === 'object') {
-                                if (obj.text && typeof obj.text === 'string') {
-                                    textArray.push(obj.text);
-                                }
-                                Object.values(obj).forEach(val => extractTextNodes(val, textArray));
+                                Object.values(obj).forEach(val => extractAllStrings(val, results));
                             }
-                            return textArray;
+                            return results;
                         }
 
-                        const allTexts = extractTextNodes(jsonData);
+                        const allStrings = extractAllStrings(jsonData);
 
+                        // 3. 往後尋找包含「年」的日期字串
+                        let joinedInfo = "未知";
+                        const joinIndex = allStrings.indexOf("已加入");
 
-                        let joinedInfo = allTexts[allTexts.indexOf("已加入") + 1];
-                        joinedInfo = joinedInfo.split(" · ")[0].trim()
-                        const countryRegex = /"THREADS_ABOUT_THIS_PROFILE:about_this_profile_country","mode":"[^"]+","initial":"([^"]+)"/;
-                        const locationMatch = cleanResponse.match(countryRegex);
-                        const locationInfo = locationMatch ? decode(locationMatch[1]) : "無地點資料";
+                        if (joinIndex !== -1) {
+                            for (let k = joinIndex + 1; k < Math.min(joinIndex + 10, allStrings.length); k++) {
+                                const str = allStrings[k];
+                                if (str && str.includes("年") ) {
+                                    joinedInfo = str.split(" · ")[0].trim();
+                                    break;
+                                }
+                            }
+                        }
 
+                        // 4. 打包儲存
                         const finalData = {
                             userId: username,
                             usernumber: targetUserId,
@@ -430,14 +482,22 @@
                             location: locationInfo,
                             timestamp: Date.now()
                         };
-                        console.log(finalData);
+
+                        console.log("解析成功:", finalData);
                         await unsafeWindow.THREADS_DB_CENTER.saveProfile(finalData);
 
                     } catch (e) {
-                        console.error("解析 JSON 失敗", e);
+                        console.error("Profile API 解析錯誤:", e);
+                        const resultEvent = new CustomEvent('REQUEST_PROFILE_ERROR', {
+                            detail: { username }
+                        });
+                        window.dispatchEvent(resultEvent);
                     }
                 } else {
-                    console.error("請求依然失敗，狀態碼:", response.status);
+                    const resultEvent = new CustomEvent('REQUEST_PROFILE_ERROR', {
+                        detail: { username }
+                    });
+                    window.dispatchEvent(resultEvent);
                 }
             }
         });
